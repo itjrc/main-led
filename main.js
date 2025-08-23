@@ -7,7 +7,6 @@ const AdmZip = require('adm-zip');
 const OBSWebSocket = require('obs-websocket-js').default;
 
 let mainWindow;
-let ledManagementWindow;
 let obs = null;
 let automationInterval = null;
 let obsProcess = null;
@@ -307,49 +306,8 @@ ipcMain.handle('open-folder', async (event, folderPath) => {
     }
 });
 
-// LED Management Window
-ipcMain.handle('open-led-management', async () => {
-    if (ledManagementWindow) {
-        ledManagementWindow.focus();
-        return;
-    }
-
-    ledManagementWindow = new BrowserWindow({
-        width: 1400,
-        height: 900,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
-        },
-        parent: mainWindow
-    });
-
-    ledManagementWindow.loadFile('led-management.html');
-
-    if (process.argv.includes('--dev')) {
-        ledManagementWindow.webContents.openDevTools();
-    }
-
-    ledManagementWindow.on('closed', () => {
-        ledManagementWindow = null;
-        // Disconnect OBS WebSocket but keep OBS running
-        if (obs && obs.identified) {
-            try {
-                obs.disconnect();
-                console.log('Disconnected OBS WebSocket (LED Management window closed)');
-            } catch (error) {
-                console.error('Error disconnecting OBS WebSocket:', error);
-            }
-        }
-        
-        // Stop automation but keep OBS running
-        if (automationInterval) {
-            clearInterval(automationInterval);
-            automationInterval = null;
-            console.log('Stopped automation (LED Management window closed)');
-        }
-    });
-});
+// Remove the separate LED Management window handler since it's now integrated
+// The functionality is now handled through the main window tabs
 
 // OBS WebSocket handlers
 ipcMain.handle('obs-connect', async (event, address, password) => {
@@ -358,16 +316,16 @@ ipcMain.handle('obs-connect', async (event, address, password) => {
             obs = new OBSWebSocket();
             
             obs.on('ConnectionClosed', () => {
-                if (ledManagementWindow) {
-                    ledManagementWindow.webContents.send('obs-event', {
+                if (mainWindow) {
+                    mainWindow.webContents.send('obs-event', {
                         type: 'connection-closed'
                     });
                 }
             });
 
             obs.on('CurrentProgramSceneChanged', (data) => {
-                if (ledManagementWindow) {
-                    ledManagementWindow.webContents.send('obs-event', {
+                if (mainWindow) {
+                    mainWindow.webContents.send('obs-event', {
                         type: 'scene-changed',
                         sceneName: data.sceneName
                     });
@@ -503,8 +461,8 @@ ipcMain.handle('obs-show-scores', async (event, data) => {
 
                 lastSceneId = id;
 
-                if (ledManagementWindow) {
-                    ledManagementWindow.webContents.send('obs-event', {
+                if (mainWindow) {
+                    mainWindow.webContents.send('obs-event', {
                         type: 'automation-progress',
                         message: `Showing score: ${name}`
                     });
@@ -721,8 +679,8 @@ ipcMain.handle('obs-start-automation', async (event, data) => {
                             sceneItemEnabled: true
                         });
                         
-                        if (ledManagementWindow) {
-                            ledManagementWindow.webContents.send('obs-event', {
+                        if (mainWindow) {
+                            mainWindow.webContents.send('obs-event', {
                                 type: 'automation-progress',
                                 message: `Showing: ${item.name} for ${item.duration}s`
                             });

@@ -4,189 +4,378 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OBS Main LED - App Manager</title>
+    <link rel="stylesheet" href="src/styles/components.css">
     <style>
+        :root {
+            /* Shadcn color palette */
+            --background: 0 0% 100%;
+            --foreground: 222.2 84% 4.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 222.2 84% 4.9%;
+            --popover: 0 0% 100%;
+            --popover-foreground: 222.2 84% 4.9%;
+            --primary: 222.2 47.4% 11.2%;
+            --primary-foreground: 210 40% 98%;
+            --secondary: 210 40% 96%;
+            --secondary-foreground: 222.2 84% 4.9%;
+            --muted: 210 40% 96%;
+            --muted-foreground: 215.4 16.3% 46.9%;
+            --accent: 210 40% 96%;
+            --accent-foreground: 222.2 84% 4.9%;
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 214.3 31.8% 91.4%;
+            --input: 214.3 31.8% 91.4%;
+            --ring: 222.2 84% 4.9%;
+            --radius: 0.5rem;
+            --success: 142.1 76.2% 36.3%;
+            --success-foreground: 355.7 100% 97.3%;
+            --warning: 32.5 94.6% 43.7%;
+            --warning-foreground: 210 40% 98%;
+        }
+
+        * {
+            border-color: hsl(var(--border));
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
             margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1rem;
+            background-color: hsl(var(--muted));
             min-height: 100vh;
-            color: #333;
+            color: hsl(var(--foreground));
+            font-feature-settings: "rlig" 1, "calt" 1;
         }
 
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            background: hsl(var(--background));
+            border-radius: var(--radius);
+            border: 1px solid hsl(var(--border));
             overflow: hidden;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
         }
 
         .header {
-            background: linear-gradient(135deg, #ff6b6b, #ffa726);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            border-bottom: 1px solid hsl(var(--border));
+            padding: 1.5rem;
+            background: hsl(var(--background));
         }
 
         .header h1 {
             margin: 0;
-            font-size: 2.5em;
-            font-weight: 300;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: hsl(var(--foreground));
+            line-height: 1.25;
         }
 
         .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.9;
+            margin: 0.25rem 0 0 0;
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
         }
 
-        .content {
-            padding: 30px;
+        .nav-tabs {
+            display: flex;
+            border-bottom: 1px solid hsl(var(--border));
+            background: hsl(var(--background));
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: hsl(var(--muted-foreground));
+            transition: all 0.2s ease;
+            border-bottom: 2px solid transparent;
+            position: relative;
+        }
+
+        .nav-tab:hover:not(:disabled) {
+            color: hsl(var(--foreground));
+            background: hsl(var(--muted) / 0.5);
+        }
+
+        .nav-tab.active {
+            color: hsl(var(--foreground));
+            border-bottom-color: hsl(var(--primary));
+        }
+
+        .nav-tab:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 1.5rem;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
         }
 
         .section {
-            margin-bottom: 40px;
-            padding: 25px;
-            border-radius: 8px;
-            background: #f8f9fa;
-            border-left: 4px solid #007bff;
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            padding: 1.5rem;
         }
 
         .section h2 {
-            margin: 0 0 20px 0;
-            color: #2c3e50;
+            margin: 0 0 1rem 0;
+            color: hsl(var(--foreground));
+            font-size: 1.125rem;
+            font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 0.5rem;
         }
 
         .status-card {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            margin: 15px 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            transition: transform 0.2s ease;
+            padding: 1rem;
+            background: hsl(var(--background));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            margin: 0.75rem 0;
+            transition: all 0.2s ease;
         }
 
         .status-card:hover {
-            transform: translateY(-2px);
+            box-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.1);
         }
 
         .app-info {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 0.75rem;
         }
 
         .app-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: var(--radius);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5em;
-            color: white;
+            font-size: 1.25rem;
+            background: hsl(var(--muted));
+            color: hsl(var(--muted-foreground));
         }
 
-        .app-icon.node { background: #339933; }
-        .app-icon.obs { background: #0f1419; }
-        .app-icon.ffmpeg { background: #007808; }
+        .app-icon.node { 
+            background: hsl(142.1 76.2% 36.3% / 0.1);
+            color: hsl(142.1 76.2% 36.3%);
+        }
+        
+        .app-icon.obs { 
+            background: hsl(var(--primary) / 0.1);
+            color: hsl(var(--primary));
+        }
+        
+        .app-icon.ffmpeg { 
+            background: hsl(142.1 76.2% 36.3% / 0.1);
+            color: hsl(142.1 76.2% 36.3%);
+        }
 
         .app-details h3 {
             margin: 0;
-            color: #2c3e50;
-            font-size: 1.1em;
+            color: hsl(var(--foreground));
+            font-size: 0.875rem;
+            font-weight: 500;
         }
 
         .app-details p {
-            margin: 5px 0 0 0;
-            color: #6c757d;
-            font-size: 0.9em;
+            margin: 0.25rem 0 0 0;
+            color: hsl(var(--muted-foreground));
+            font-size: 0.75rem;
         }
 
         .status {
             display: flex;
             align-items: center;
-            gap: 10px;
-        }
-
-        .status-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-        }
-
-        .status-indicator.installed { background: #28a745; }
-        .status-indicator.missing { background: #dc3545; }
-        .status-indicator.downloading { background: #ffc107; animation: pulse 1s infinite; }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9em;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            display: inline-block;
-        }
-
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #0056b3;
-        }
-
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #1e7e34;
-        }
-
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #545b62;
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
+            gap: 0.5rem;
         }
 
         .progress-message {
-            margin: 10px 0;
-            padding: 10px;
-            background: #e3f2fd;
-            border-radius: 4px;
-            color: #1976d2;
-            font-size: 0.9em;
+            margin: 0.5rem 0;
+            padding: 0.75rem;
+            background: hsl(var(--muted));
+            border-radius: var(--radius);
+            color: hsl(var(--foreground));
+            font-size: 0.75rem;
+            border: 1px solid hsl(var(--border));
         }
 
         .refresh-btn {
-            float: right;
-            margin-top: -5px;
+            margin-left: auto;
+        }
+
+        .input-group {
+            margin-bottom: 1rem;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: hsl(var(--foreground));
+            font-size: 0.875rem;
+        }
+
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-sizing: border-box;
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            transition: all 0.2s ease;
+            font-family: inherit;
+            line-height: 1.25;
+            min-height: 2.25rem;
+        }
+
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: hsl(var(--ring));
+            box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+        }
+
+        .input-group input::placeholder {
+            color: hsl(var(--muted-foreground));
+        }
+
+        .input-group input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: hsl(var(--muted));
+        }
+
+        /* Number input specific styling */
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Password input styling */
+        input[type="password"] {
+            letter-spacing: 0.1em;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .setting-item {
+            background: hsl(var(--card));
+            padding: 1rem;
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            transition: box-shadow 0.2s ease;
+        }
+
+        .setting-item:hover {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .setting-item label {
+            font-weight: 500;
+            color: hsl(var(--foreground));
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .setting-item small {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .scene-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            background: hsl(var(--background));
+        }
+
+        .scene-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid hsl(var(--border));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s ease;
+        }
+
+        .scene-item:last-child {
+            border-bottom: none;
+        }
+
+        .scene-item:hover {
+            background: hsl(var(--muted) / 0.5);
+        }
+
+        .scene-item.active {
+            background: hsl(var(--accent));
+            border-left: 2px solid hsl(var(--primary));
+        }
+
+        .scene-item.active:hover {
+            background: hsl(var(--accent));
+        }
+
+        /* Checkbox styling */
+        input[type="checkbox"] {
+            accent-color: hsl(var(--primary));
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            body {
+                padding: 0.5rem;
+            }
+            
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -194,23 +383,34 @@
     <div class="container">
         <div class="header">
             <h1>OBS Main LED</h1>
-            <p>Application Manager for Node.js, OBS Studio, FFmpeg & FFprobe</p>
+            <p>Application Manager & LED Control System</p>
         </div>
         
-        <div class="content">
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('setup')">
+                <span>⚙️</span> System Setup
+            </button>
+            <button class="nav-tab" onclick="switchTab('led-control')" id="led-control-tab" disabled>
+                <span>🎛️</span> LED Control
+            </button>
+        </div>
+
+        <!-- Setup Tab Content -->
+        <div id="setup-tab" class="tab-content active">
             <div class="section">
                 <h2>
                     <span>📦</span>
                     Node.js Status
-                    <button class="btn btn-secondary refresh-btn" onclick="refreshAll()">Refresh All</button>
+                    <button class="btn btn-outline refresh-btn" onclick="refreshAll()">Refresh All</button>
                 </h2>
                 
                 <div class="status-card" id="node-card">
                     <div class="app-info">
-                        <div class="app-icon node">N</div>
+                        <div class="app-icon node">⬢</div>
                         <div class="app-details">
-                            <h3>Node.js</h3>
-                            <p id="node-version">Checking...</p>
+                            <h3>Node.js Runtime</h3>
+                            <p id="node-version">Checking status...</p>
                         </div>
                     </div>
                     <div class="status">
@@ -221,36 +421,36 @@
             </div>
 
             <div class="section">
-                <h2><span>🎥</span> External Applications</h2>
+                <h2><span>📦</span> Dependencies</h2>
                 
                 <div class="status-card" id="obs-card">
                     <div class="app-info">
-                        <div class="app-icon obs">📹</div>
+                        <div class="app-icon obs">🎥</div>
                         <div class="app-details">
                             <h3>OBS Studio</h3>
-                            <p id="obs-version">Checking...</p>
+                            <p id="obs-version">Checking status...</p>
                         </div>
                     </div>
                     <div class="status">
                         <div class="status-indicator" id="obs-indicator"></div>
                         <button class="btn btn-primary" id="obs-btn" onclick="downloadApp('obs')" disabled>Loading...</button>
-                        <button class="btn btn-secondary" onclick="openFolder('provider/obs')" title="Open OBS folder">📁</button>
+                        <button class="btn btn-ghost btn-icon" onclick="openFolder('provider/obs')" title="Open OBS folder">📁</button>
                     </div>
                 </div>
                 <div id="obs-progress" style="display: none;"></div>
 
                 <div class="status-card" id="ffmpeg-card">
                     <div class="app-info">
-                        <div class="app-icon ffmpeg">🎬</div>
+                        <div class="app-icon ffmpeg">🎞️</div>
                         <div class="app-details">
                             <h3>FFmpeg</h3>
-                            <p id="ffmpeg-version">Checking...</p>
+                            <p id="ffmpeg-version">Checking status...</p>
                         </div>
                     </div>
                     <div class="status">
                         <div class="status-indicator" id="ffmpeg-indicator"></div>
                         <button class="btn btn-primary" id="ffmpeg-btn" onclick="downloadApp('ffmpeg')" disabled>Loading...</button>
-                        <button class="btn btn-secondary" onclick="openFolder('provider/ffmpeg')" title="Open FFmpeg folder">📁</button>
+                        <button class="btn btn-ghost btn-icon" onclick="openFolder('provider/ffmpeg')" title="Open FFmpeg folder">📁</button>
                     </div>
                 </div>
                 <div id="ffmpeg-progress" style="display: none;"></div>
@@ -260,34 +460,134 @@
                         <div class="app-icon ffmpeg">🔍</div>
                         <div class="app-details">
                             <h3>FFprobe</h3>
-                            <p id="ffprobe-version">Checking...</p>
+                            <p id="ffprobe-version">Checking status...</p>
                         </div>
                     </div>
                     <div class="status">
                         <div class="status-indicator" id="ffprobe-indicator"></div>
-                        <span id="ffprobe-status">Part of FFmpeg</span>
+                        <span id="ffprobe-status">Included with FFmpeg</span>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div class="section" id="led-management-section" style="display: none;">
-                <h2><span>💡</span> LED Management</h2>
-                <div class="status-card">
-                    <div class="app-info">
-                        <div class="app-icon" style="background: #4CAF50;">🎛️</div>
-                        <div class="app-details">
-                            <h3>OBS LED Management Interface</h3>
-                            <p>Control OBS scenes and manage LED display automation</p>
+        <!-- LED Control Tab Content -->
+        <div id="led-control-tab-content" class="tab-content">
+            <div class="content-grid">
+                <!-- Connection Panel -->
+                <div class="section">
+                    <h2><span>🔗</span> Connection</h2>
+                    
+                    <div class="connection-status disconnected" id="connection-status">
+                        Disconnected from OBS
+                    </div>
+
+                    <div class="input-group">
+                        <label>WebSocket Address</label>
+                        <input type="text" id="obs-address" value="ws://127.0.0.1:4455" placeholder="ws://127.0.0.1:4455">
+                    </div>
+
+                    <div class="input-group">
+                        <label>Password</label>
+                        <input type="password" id="obs-password" value="123456" placeholder="Enter password">
+                    </div>
+
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="btn btn-success" id="launch-obs-btn" onclick="window.obsManager.launchOBS()">Launch OBS</button>
+                        <button class="btn btn-primary" id="connect-btn" onclick="window.obsManager.connectToOBS()">Connect</button>
+                        <button class="btn btn-destructive" id="disconnect-btn" onclick="window.obsManager.disconnectFromOBS()" disabled>Disconnect</button>
+                    </div>
+                </div>
+
+                <!-- Scene Control Panel -->
+                <div class="section">
+                    <h2><span>🎬</span> Scenes</h2>
+                    
+                    <div class="scene-list" id="scene-list">
+                        <div style="padding: 1.5rem; text-align: center; color: hsl(var(--muted-foreground));">
+                            Connect to OBS to view scenes
                         </div>
                     </div>
-                    <div class="status">
-                        <button class="btn btn-success" id="led-management-btn" onclick="openLedManagement()">Open LED Management</button>
+
+                    <div style="margin-top: 1rem;">
+                        <button class="btn btn-outline" onclick="window.obsManager.refreshScenes()" disabled id="refresh-scenes-btn">Refresh Scenes</button>
+                    </div>
+                </div>
+
+                <!-- Automation Settings Panel -->
+                <div class="section">
+                    <h2><span>⚙️</span> Automation</h2>
+                    
+                    <div class="controls-grid">
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="show-scores" checked style="margin-right: 0.5rem;">
+                                Include scores in automation
+                            </label>
+                            <small style="color: hsl(var(--muted-foreground)); display: block; margin-top: 0.25rem; font-size: 0.75rem;">
+                                When disabled, only partner videos will loop
+                            </small>
+                        </div>
+                        
+                        <div class="setting-item" id="score-interval-setting">
+                            <label>Score interval (ms)</label>
+                            <input type="number" id="score-interval" value="20000" min="1000" max="60000">
+                        </div>
+                        
+                        <div class="setting-item">
+                            <label>Transition time (ms)</label>
+                            <input type="number" id="transition-time" value="300" min="100" max="2000">
+                        </div>
+                        
+                        <div class="setting-item" id="ads-count-setting">
+                            <label>Videos between scores</label>
+                            <input type="number" id="ads-count" value="5" min="1" max="20">
+                        </div>
+
+                        <div class="setting-item" style="grid-column: 1 / -1;">
+                            <label>Video directory</label>
+                            <input type="text" id="video-path" value="data/PARTNERS_VIDEOS/" placeholder="Base path for videos">
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem; display: flex; gap: 0.5rem;">
+                        <button class="btn btn-success" onclick="window.obsManager.startAutomation()" disabled id="start-automation-btn">Start Automation</button>
+                        <button class="btn btn-warning" onclick="window.obsManager.stopAutomation()" disabled id="stop-automation-btn">Stop Automation</button>
+                    </div>
+                </div>
+
+                <!-- Manual Controls Panel -->
+                <div class="section">
+                    <h2><span>🎮</span> Manual Controls</h2>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem;">
+                        <button class="btn btn-outline" onclick="window.obsManager.goToScene('SCORES')" disabled id="goto-scores-btn">Scores</button>
+                        <button class="btn btn-outline" onclick="window.obsManager.goToScene('LOOP_IND')" disabled id="goto-loop-btn">Loop</button>
+                        <button class="btn btn-primary" onclick="window.obsManager.showScores()" disabled id="show-scores-btn">Show Scores</button>
+                        <button class="btn btn-secondary" onclick="window.obsManager.initializeScenes()" disabled id="init-scenes-btn">Initialize</button>
+                    </div>
+                </div>
+
+                <!-- Activity Log Panel -->
+                <div class="section full-width">
+                    <h2><span>📊</span> Activity Log</h2>
+                    <div class="log-container" id="log-output">
+                        <div class="log-entry info">LED Management interface ready</div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Load UI Components -->
+    <script src="src/components/ui/button.js"></script>
+    <script src="src/components/ui/card.js"></script>
+    <script src="src/components/ui/toggle.js"></script>
+    
+    <!-- Load Modules -->
+    <script src="src/modules/obsManager.js"></script>
+    
+    <!-- Main Renderer Script -->
     <script src="renderer.js"></script>
 </body>
 </html>

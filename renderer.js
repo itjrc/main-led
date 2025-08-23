@@ -1,6 +1,61 @@
 const { ipcRenderer } = require('electron');
 
+// Global variables
 let downloadInProgress = {};
+let obsManager = null;
+
+// Expose electron API for modules
+window.electronAPI = {
+    invoke: ipcRenderer.invoke.bind(ipcRenderer),
+    ipcRenderer: ipcRenderer
+};
+
+// Tab switching functionality
+function switchTab(tabName) {
+    // Remove active class from all tabs and contents
+    document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    // Add active class to selected tab and content
+    if (tabName === 'setup') {
+        document.querySelector('[onclick="switchTab(\'setup\')"]').classList.add('active');
+        document.getElementById('setup-tab').classList.add('active');
+    } else if (tabName === 'led-control') {
+        document.querySelector('[onclick="switchTab(\'led-control\')"]').classList.add('active');
+        document.getElementById('led-control-tab-content').classList.add('active');
+        
+        // Initialize OBS Manager if not already done
+        if (!obsManager) {
+            obsManager = new OBSManager();
+            window.obsManager = obsManager;
+        }
+    }
+}
+
+// Make switchTab global
+window.switchTab = switchTab;
+
+// Toggle score settings functionality
+function toggleScoreSettings() {
+    const showScores = document.getElementById('show-scores').checked;
+    const scoreIntervalSetting = document.getElementById('score-interval-setting');
+    const adsCountSetting = document.getElementById('ads-count-setting');
+    const showScoresBtn = document.getElementById('show-scores-btn');
+    
+    if (showScores) {
+        scoreIntervalSetting.style.opacity = '1';
+        adsCountSetting.style.opacity = '1';
+        document.getElementById('score-interval').disabled = false;
+        document.getElementById('ads-count').disabled = false;
+        if (showScoresBtn) showScoresBtn.disabled = false;
+    } else {
+        scoreIntervalSetting.style.opacity = '0.5';
+        adsCountSetting.style.opacity = '0.5';
+        document.getElementById('score-interval').disabled = true;
+        document.getElementById('ads-count').disabled = true;
+        if (showScoresBtn) showScoresBtn.disabled = true;
+    }
+}
 
 async function checkNodeVersion() {
     try {
@@ -117,7 +172,7 @@ function checkAllSystemsReady() {
     const obsIndicator = document.getElementById('obs-indicator');
     const ffmpegIndicator = document.getElementById('ffmpeg-indicator');
     const ffprobeIndicator = document.getElementById('ffprobe-indicator');
-    const ledSection = document.getElementById('led-management-section');
+    const ledControlTab = document.getElementById('led-control-tab');
     
     const allReady = nodeIndicator.classList.contains('installed') && 
                      obsIndicator.classList.contains('installed') && 
@@ -125,14 +180,14 @@ function checkAllSystemsReady() {
                      ffprobeIndicator.classList.contains('installed');
     
     if (allReady) {
-        ledSection.style.display = 'block';
+        ledControlTab.disabled = false;
+        ledControlTab.style.opacity = '1';
+        ledControlTab.style.cursor = 'pointer';
     } else {
-        ledSection.style.display = 'none';
+        ledControlTab.disabled = true;
+        ledControlTab.style.opacity = '0.5';
+        ledControlTab.style.cursor = 'not-allowed';
     }
-}
-
-async function openLedManagement() {
-    await ipcRenderer.invoke('open-led-management');
 }
 
 ipcRenderer.on('download-progress', (event, data) => {
@@ -158,9 +213,33 @@ ipcRenderer.on('download-progress', (event, data) => {
 
 window.addEventListener('DOMContentLoaded', () => {
     refreshAll();
+    
+    // Initialize UI components
+    Button.create('.btn');
+    Card.create('.card');
+    
+    // Set up toggle event listeners
+    const showScoresCheckbox = document.getElementById('show-scores');
+    if (showScoresCheckbox) {
+        showScoresCheckbox.addEventListener('change', toggleScoreSettings);
+        toggleScoreSettings(); // Set initial state
+    }
+    
+    // Set up tab switching for disabled tabs
+    const ledControlTab = document.getElementById('led-control-tab');
+    if (ledControlTab) {
+        ledControlTab.addEventListener('click', (e) => {
+            if (ledControlTab.disabled) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+        });
+    }
 });
 
+// Global function exports
 window.downloadApp = downloadApp;
 window.openFolder = openFolder;
 window.refreshAll = refreshAll;
-window.openLedManagement = openLedManagement;
+window.toggleScoreSettings = toggleScoreSettings;
