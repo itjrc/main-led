@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LED Management - OBS Control</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .back-btn {
+            position: absolute;
+            left: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.2);
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .back-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .content {
+            padding: 30px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .panel {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 25px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .panel h2 {
+            margin: 0 0 20px 0;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-section {
+            margin-bottom: 20px;
+        }
+
+        .connection-status {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .connection-status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .connection-status.connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            margin: 5px;
+        }
+
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+
+        .btn:hover { transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+
+        .scene-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: white;
+        }
+
+        .scene-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .scene-item:last-child {
+            border-bottom: none;
+        }
+
+        .scene-item.active {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+        }
+
+        .log-container {
+            grid-column: 1 / -1;
+            background: #212529;
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            word-wrap: break-word;
+        }
+
+        .log-entry.info { color: #17a2b8; }
+        .log-entry.success { color: #28a745; }
+        .log-entry.warning { color: #ffc107; }
+        .log-entry.error { color: #dc3545; }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .setting-item {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="back-btn" onclick="goBack()">← Back</button>
+            <h1>LED Management</h1>
+            <p>OBS Scene Control & LED Display Automation</p>
+        </div>
+        
+        <div class="content">
+            <div class="panel">
+                <h2><span>🔌</span> Connection</h2>
+                
+                <div class="status-section">
+                    <div class="connection-status disconnected" id="connection-status">
+                        Disconnected from OBS
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>OBS WebSocket Address:</label>
+                    <input type="text" id="obs-address" value="ws://127.0.0.1:4455" placeholder="ws://127.0.0.1:4455">
+                </div>
+
+                <div class="input-group">
+                    <label>Password:</label>
+                    <input type="password" id="obs-password" value="123456" placeholder="Enter password">
+                </div>
+
+                <button class="btn btn-success" id="launch-obs-btn" onclick="launchOBS()">Launch OBS</button>
+                <button class="btn btn-primary" id="connect-btn" onclick="connectToOBS()">Connect to OBS</button>
+                <button class="btn btn-danger" id="disconnect-btn" onclick="disconnectFromOBS()" disabled>Disconnect</button>
+            </div>
+
+            <div class="panel">
+                <h2><span>🎬</span> Scene Control</h2>
+                
+                <div class="scene-list" id="scene-list">
+                    <div style="padding: 20px; text-align: center; color: #6c757d;">
+                        Connect to OBS to view scenes
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <button class="btn btn-success" onclick="refreshScenes()" disabled id="refresh-scenes-btn">Refresh Scenes</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2><span>⚙️</span> Automation Settings</h2>
+                
+                <div class="controls-grid">
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="show-scores" checked style="margin-right: 8px;">
+                            Show Scores in Automation
+                        </label>
+                        <small style="color: #6c757d; display: block; margin-top: 5px;">
+                            When disabled, only partner videos will loop (no score displays)
+                        </small>
+                    </div>
+                    
+                    <div class="setting-item" id="score-interval-setting">
+                        <label>Score Update Interval (ms):</label>
+                        <input type="number" id="score-interval" value="20000" min="1000" max="60000">
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label>Transition Time (ms):</label>
+                        <input type="number" id="transition-time" value="300" min="100" max="2000">
+                    </div>
+                    
+                    <div class="setting-item" id="ads-count-setting">
+                        <label>Ads Between Scores:</label>
+                        <input type="number" id="ads-count" value="5" min="1" max="20">
+                    </div>
+
+                    <div class="setting-item">
+                        <label>Video Path Base:</label>
+                        <input type="text" id="video-path" value="data/PARTNERS_VIDEOS/" placeholder="Base path for videos">
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-success" onclick="startAutomation()" disabled id="start-automation-btn">Start Automation</button>
+                    <button class="btn btn-warning" onclick="stopAutomation()" disabled id="stop-automation-btn">Stop Automation</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2><span>🎯</span> Manual Controls</h2>
+                
+                <button class="btn btn-primary" onclick="goToScene('SCORES')" disabled id="goto-scores-btn">Go to SCORES</button>
+                <button class="btn btn-primary" onclick="goToScene('LOOP_IND')" disabled id="goto-loop-btn">Go to LOOP_IND</button>
+                <button class="btn btn-warning" onclick="showScores()" disabled id="show-scores-btn">Show Scores</button>
+                <button class="btn btn-success" onclick="initializeScenes()" disabled id="init-scenes-btn">Initialize Scenes</button>
+            </div>
+
+            <div class="log-container">
+                <h3 style="margin-top: 0; color: #ffffff;">Activity Log</h3>
+                <div id="log-output">
+                    <div class="log-entry info">LED Management interface loaded</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="led-renderer.js"></script>
+</body>
+</html>
