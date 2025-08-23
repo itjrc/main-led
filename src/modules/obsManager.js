@@ -23,6 +23,10 @@ class OBSManager {
             window.electronAPI.ipcRenderer.on('obs-event', (event, data) => {
                 this.handleOBSEvent(data);
             });
+            
+            window.electronAPI.ipcRenderer.on('obs-launch-progress', (event, data) => {
+                this.handleLaunchProgress(data);
+            });
         }
     }
 
@@ -47,10 +51,24 @@ class OBSManager {
         }
     }
 
+    handleLaunchProgress(data) {
+        // Update progress dialog
+        this.updateLaunchProgress(data.step, data.message);
+        
+        // Add to log
+        this.addLog(data.message, 'info');
+    }
+
     async launchOBS() {
         try {
+            // Show progress dialog
+            this.showLaunchProgress();
+            
             this.addLog('Launching OBS Studio...', 'info');
             const result = await window.electronAPI.invoke('launch-obs');
+            
+            // Hide progress dialog
+            this.hideLaunchProgress();
             
             if (result.success) {
                 this.addLog('OBS Studio launched successfully', 'success');
@@ -68,6 +86,7 @@ class OBSManager {
                 this.addLog(`Failed to launch OBS: ${result.error}`, 'error');
             }
         } catch (error) {
+            this.hideLaunchProgress();
             this.addLog(`Error launching OBS: ${error.message}`, 'error');
         }
     }
@@ -326,6 +345,130 @@ class OBSManager {
             adsCount: parseInt(document.getElementById('ads-count')?.value) || 5,
             videoPath: document.getElementById('video-path')?.value || 'data/PARTNERS_VIDEOS/'
         };
+    }
+
+    showLaunchProgress() {
+        // Create progress dialog
+        const dialog = document.createElement('div');
+        dialog.id = 'launch-progress-dialog';
+        dialog.className = 'progress-dialog-overlay';
+        dialog.innerHTML = `
+            <div class="progress-dialog">
+                <div class="progress-header">
+                    <h3>🚀 Launching OBS Studio</h3>
+                </div>
+                <div class="progress-content">
+                    <div class="progress-step" id="progress-step">Initializing...</div>
+                    <div class="progress-message" id="progress-message">Preparing to launch OBS...</div>
+                    <div class="progress-spinner">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        
+        // Add CSS styles if not already added
+        if (!document.getElementById('progress-dialog-styles')) {
+            const styles = document.createElement('style');
+            styles.id = 'progress-dialog-styles';
+            styles.textContent = `
+                .progress-dialog-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.5);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 1000;
+                    backdrop-filter: blur(4px);
+                }
+                
+                .progress-dialog {
+                    background: hsl(var(--background));
+                    border: 1px solid hsl(var(--border));
+                    border-radius: var(--radius);
+                    padding: 2rem;
+                    min-width: 400px;
+                    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+                }
+                
+                .progress-header h3 {
+                    margin: 0 0 1.5rem 0;
+                    color: hsl(var(--foreground));
+                    font-size: 1.25rem;
+                    font-weight: 600;
+                    text-align: center;
+                }
+                
+                .progress-content {
+                    text-align: center;
+                }
+                
+                .progress-step {
+                    font-weight: 500;
+                    color: hsl(var(--primary));
+                    margin-bottom: 0.5rem;
+                    font-size: 0.875rem;
+                }
+                
+                .progress-message {
+                    color: hsl(var(--muted-foreground));
+                    margin-bottom: 2rem;
+                    font-size: 0.875rem;
+                }
+                
+                .progress-spinner {
+                    display: flex;
+                    justify-content: center;
+                }
+                
+                .spinner {
+                    width: 2rem;
+                    height: 2rem;
+                    border: 2px solid hsl(var(--muted));
+                    border-top: 2px solid hsl(var(--primary));
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                }
+                
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(styles);
+        }
+    }
+
+    updateLaunchProgress(step, message) {
+        const stepEl = document.getElementById('progress-step');
+        const messageEl = document.getElementById('progress-message');
+        
+        if (stepEl && messageEl) {
+            const stepLabels = {
+                'checking-videos': '🎬 Checking Videos',
+                'converting-videos': '🔄 Converting Videos',
+                'checking-images': '📷 Checking Images',
+                'converting-images': '🔄 Converting Images',
+                'preparing-obs': '⚙️ Preparing OBS',
+                'launching-obs': '🚀 Launching OBS'
+            };
+            
+            stepEl.textContent = stepLabels[step] || step;
+            messageEl.textContent = message;
+        }
+    }
+
+    hideLaunchProgress() {
+        const dialog = document.getElementById('launch-progress-dialog');
+        if (dialog) {
+            dialog.remove();
+        }
     }
 }
 
