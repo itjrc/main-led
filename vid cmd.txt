@@ -1,1 +1,0 @@
-ffmpeg -y -f lavfi -i color=c=black:s=1920x1080:d=5 -i input.png -filter_complex "[1:v]scale=1720:-1[fg];[0:v][fg]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2" -c:v libx264 -pix_fmt yuv420p output.mp4
