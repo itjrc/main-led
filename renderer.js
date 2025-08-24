@@ -1,14 +1,11 @@
-const { ipcRenderer } = require('electron');
-
 // Global variables
 let downloadInProgress = {};
 let obsManager = null;
 
-// Expose electron API for modules
-window.electronAPI = {
-    invoke: ipcRenderer.invoke.bind(ipcRenderer),
-    ipcRenderer: ipcRenderer
-};
+// Check if electronAPI is available (it should be exposed by preload.js)
+if (!window.electronAPI) {
+    console.error('electronAPI not available. Make sure preload.js is loaded correctly.');
+}
 
 // Tab switching functionality
 function switchTab(tabName) {
@@ -59,7 +56,7 @@ function toggleScoreSettings() {
 
 async function checkNodeVersion() {
     try {
-        const result = await ipcRenderer.invoke('get-node-version');
+        const result = await window.electronAPI.ipcRenderer.invoke('get-node-version');
         const versionElement = document.getElementById('node-version');
         const statusElement = document.getElementById('node-status');
         const indicatorElement = document.getElementById('node-indicator');
@@ -80,8 +77,8 @@ async function checkNodeVersion() {
 
 async function checkAppStatus(appName) {
     try {
-        const exists = await ipcRenderer.invoke('check-app-exists', appName);
-        const versionResult = await ipcRenderer.invoke('get-app-version', appName);
+        const exists = await window.electronAPI.ipcRenderer.invoke('check-app-exists', appName);
+        const versionResult = await window.electronAPI.ipcRenderer.invoke('get-app-version', appName);
         
         const versionElement = document.getElementById(`${appName}-version`);
         const indicatorElement = document.getElementById(`${appName}-indicator`);
@@ -127,7 +124,7 @@ async function downloadApp(appName) {
     progressElement.innerHTML = '<div class="progress-message">Preparing download...</div>';
     
     try {
-        const result = await ipcRenderer.invoke('download-app', appName);
+        const result = await window.electronAPI.ipcRenderer.invoke('download-app', appName);
         
         if (result.success) {
             progressElement.innerHTML = '<div class="progress-message">✅ Download completed successfully!</div>';
@@ -156,7 +153,7 @@ async function downloadApp(appName) {
 }
 
 async function openFolder(folderPath) {
-    await ipcRenderer.invoke('open-folder', folderPath);
+    await window.electronAPI.ipcRenderer.invoke('open-folder', folderPath);
 }
 
 async function refreshAll() {
@@ -190,7 +187,7 @@ function checkAllSystemsReady() {
     }
 }
 
-ipcRenderer.on('download-progress', (event, data) => {
+window.electronAPI.ipcRenderer.on('download-progress', (event, data) => {
     const progressElement = document.getElementById(`${data.app}-progress`);
     if (progressElement) {
         let message = '';
