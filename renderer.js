@@ -187,19 +187,26 @@ function checkAllSystemsReady() {
     }
 }
 
-window.electronAPI.ipcRenderer.on('download-progress', (event, data) => {
+window.electronAPI.ipcRenderer.on('download-progress', (data) => {
     const progressElement = document.getElementById(`${data.app}-progress`);
     if (progressElement) {
         let message = '';
         switch (data.status) {
             case 'downloading':
-                message = '📥 Downloading...';
+                message = typeof data.percent === 'number'
+                    ? `📥 Downloading... ${data.percent}%`
+                    : '📥 Downloading...';
                 break;
             case 'extracting':
-                message = '📦 Extracting files...';
+                message = typeof data.percent === 'number'
+                    ? `📦 Extracting files... ${data.percent}%`
+                    : '📦 Extracting files...';
                 break;
             case 'completed':
                 message = '✅ Installation completed!';
+                break;
+            case 'failed':
+                message = '❌ Installation failed';
                 break;
             default:
                 message = data.status;

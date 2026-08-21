@@ -7,6 +7,24 @@ let obs = null;
 let automationInterval = null;
 let obsProcess = null;
 
+// Timers scheduled by the score sequence. Tracked so stopAutomation() can cancel
+// them; clearInterval alone left them firing and kept switching scenes.
+let pendingTimeouts = [];
+
+function scheduleTimeout(callback, delay) {
+    const timeoutId = setTimeout(() => {
+        pendingTimeouts = pendingTimeouts.filter(id => id !== timeoutId);
+        callback();
+    }, delay);
+    pendingTimeouts.push(timeoutId);
+    return timeoutId;
+}
+
+function clearPendingTimeouts() {
+    pendingTimeouts.forEach(clearTimeout);
+    pendingTimeouts = [];
+}
+
 // Enable fullscreen projection on second monitor
 async function enableFullscreenProjection() {
     try {
@@ -207,7 +225,7 @@ async function showScores(data, mainWindow) {
                 sceneItemEnabled: false
             });
 
-            setTimeout(async () => {
+            scheduleTimeout(async () => {
                 try {
                     if (lastSceneId !== null) {
                         await obs.call('SetSceneItemEnabled', {
@@ -244,7 +262,7 @@ async function showScores(data, mainWindow) {
             idx++;
         }
 
-        setTimeout(async () => {
+        scheduleTimeout(async () => {
             try {
                 await obs.call('SetCurrentProgramScene', { sceneName: 'LOOP_IND' });
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -277,7 +295,10 @@ async function startAutomation(data, mainWindow) {
         if (automationInterval) {
             clearInterval(automationInterval);
         }
-        
+        clearPendingTimeouts();
+
+        const videoDuration = config.videoDuration > 0 ? config.videoDuration : 15000;
+
         let currentVideoIndex = 0;
         const videoItems = Object.entries(loopItems);
         
@@ -328,7 +349,7 @@ async function startAutomation(data, mainWindow) {
                 
                 // Show scores every adsCount videos
                 if (config.showScores && currentVideoIndex % config.adsCount === 0) {
-                    setTimeout(async () => {
+                    scheduleTimeout(async () => {
                         try {
                             await showScores({ scoresItems, interval: config.scoreInterval }, mainWindow);
                         } catch (error) {
@@ -346,8 +367,10 @@ async function startAutomation(data, mainWindow) {
                     });
                 }
             }
-        }, 15000); // 15 seconds per video
-        
+        }, videoDuration);
+
+        console.log(`Automation started: ${videoDuration}ms per video, scores ${config.showScores ? `every ${config.adsCount} videos` : 'disabled'}`);
+
         return { success: true };
     } catch (error) {
         return { success: false, error: error.message };
@@ -360,6 +383,9 @@ async function stopAutomation() {
             clearInterval(automationInterval);
             automationInterval = null;
         }
+        // Cancel the score sequence too, otherwise it keeps switching scenes
+        // after the user pressed Stop.
+        clearPendingTimeouts();
         return { success: true };
     } catch (error) {
         return { success: false, error: error.message };
@@ -372,7 +398,8 @@ function cleanupOBS() {
         clearInterval(automationInterval);
         automationInterval = null;
     }
-    
+    clearPendingTimeouts();
+
     if (obsProcess && !obsProcess.killed) {
         obsProcess.kill();
         obsProcess = null;

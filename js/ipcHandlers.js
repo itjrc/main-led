@@ -41,9 +41,11 @@ function setupIpcHandlers(mainWindow) {
         return await obsManager.stopAutomation();
     });
 
-    // OBS Launch handler
-    ipcMain.handle('launch-obs', async () => {
-        return await launchOBS(mainWindow);
+    // OBS Launch handler. Receives the connection settings from the UI so the
+    // WebSocket server is pre-configured with the exact credentials the app
+    // will use to connect.
+    ipcMain.handle('launch-obs', async (event, options) => {
+        return await launchOBS(mainWindow, options);
     });
 
     // Show WebSocket setup dialog

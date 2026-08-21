@@ -24,8 +24,10 @@ function createWindow() {
     // Setup IPC handlers with reference to mainWindow
     setupIpcHandlers(mainWindow);
 
-    // Open DevTools in development
-    if (process.env.NODE_ENV === 'development') {
+    // Open DevTools in development. `npm run dev` passes --dev; NODE_ENV is
+    // supported too for anyone launching electron directly.
+    const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
+    if (isDev) {
         mainWindow.webContents.openDevTools();
     }
 

@@ -20,11 +20,11 @@ class OBSManager {
     setupEventListeners() {
         // Listen for IPC events from main process
         if (window.electronAPI && window.electronAPI.ipcRenderer) {
-            window.electronAPI.ipcRenderer.on('obs-event', (event, data) => {
+            window.electronAPI.ipcRenderer.on('obs-event', (data) => {
                 this.handleOBSEvent(data);
             });
             
-            window.electronAPI.ipcRenderer.on('obs-launch-progress', (event, data) => {
+            window.electronAPI.ipcRenderer.on('obs-launch-progress', (data) => {
                 this.handleLaunchProgress(data);
             });
         }
@@ -65,7 +65,14 @@ class OBSManager {
             this.showLaunchProgress();
             
             this.addLog('Launching OBS Studio...', 'info');
-            const result = await window.electronAPI.invoke('launch-obs');
+
+            // Hand the launcher our connection settings so it can enable the
+            // WebSocket server with matching credentials
+            const config = this.getConfig();
+            const result = await window.electronAPI.ipcRenderer.invoke('launch-obs', {
+                address: config.obsAddress,
+                password: config.obsPassword
+            });
             
             // Hide progress dialog
             this.hideLaunchProgress();
@@ -97,7 +104,7 @@ class OBSManager {
         this.addLog('Attempting to connect to OBS...', 'info');
         
         try {
-            const result = await window.electronAPI.invoke('obs-connect', config.obsAddress, config.obsPassword);
+            const result = await window.electronAPI.ipcRenderer.invoke('obs-connect', config.obsAddress, config.obsPassword);
             
             if (result.success) {
                 this.isConnected = true;
@@ -121,7 +128,7 @@ class OBSManager {
 
     async disconnectFromOBS() {
         try {
-            await window.electronAPI.invoke('obs-disconnect');
+            await window.electronAPI.ipcRenderer.invoke('obs-disconnect');
             this.isConnected = false;
             this.updateConnectionStatus('disconnected', 'Disconnected from OBS');
             this.addLog('Disconnected from OBS', 'info');
@@ -136,7 +143,7 @@ class OBSManager {
 
     async refreshScenes() {
         try {
-            const result = await window.electronAPI.invoke('obs-get-scenes');
+            const result = await window.electronAPI.ipcRenderer.invoke('obs-get-scenes');
             if (result.success) {
                 this.updateSceneList(result.scenes, result.currentScene);
                 this.addLog(`Loaded ${result.scenes.length} scenes`, 'success');
@@ -150,7 +157,7 @@ class OBSManager {
 
     async goToScene(sceneName) {
         try {
-            const result = await window.electronAPI.invoke('obs-set-scene', sceneName);
+            const result = await window.electronAPI.ipcRenderer.invoke('obs-set-scene', sceneName);
             if (result.success) {
                 this.addLog(`Switched to scene: ${sceneName}`, 'success');
                 await this.refreshScenes();
@@ -166,7 +173,7 @@ class OBSManager {
         try {
             this.addLog('Initializing scene items...', 'info');
             
-            const result = await window.electronAPI.invoke('obs-initialize-scenes');
+            const result = await window.electronAPI.ipcRenderer.invoke('obs-initialize-scenes');
             if (result.success) {
                 this.scoresItems = result.scoresItems || {};
                 this.loopItems = result.loopItems || {};
@@ -186,7 +193,7 @@ class OBSManager {
             const config = this.getConfig();
             this.addLog('Starting score display sequence...', 'info');
             
-            const result = await window.electronAPI.invoke('obs-show-scores', {
+            const result = await window.electronAPI.ipcRenderer.invoke('obs-show-scores', {
                 scoresItems: this.scoresItems,
                 interval: config.scoreInterval
             });
@@ -211,7 +218,7 @@ class OBSManager {
             const config = this.getConfig();
             this.addLog('Starting LED automation...', 'info');
             
-            const result = await window.electronAPI.invoke('obs-start-automation', {
+            const result = await window.electronAPI.ipcRenderer.invoke('obs-start-automation', {
                 scoresItems: this.scoresItems,
                 loopItems: this.loopItems,
                 config: config
@@ -231,7 +238,7 @@ class OBSManager {
 
     async stopAutomation() {
         try {
-            await window.electronAPI.invoke('obs-stop-automation');
+            await window.electronAPI.ipcRenderer.invoke('obs-stop-automation');
             this.isAutomationRunning = false;
             this.updateAutomationButtons(false);
             this.addLog('LED automation stopped', 'info');
@@ -324,9 +331,10 @@ class OBSManager {
 
     async showWebSocketSetupDialog() {
         try {
-            const result = await window.electronAPI.invoke('show-websocket-dialog');
-            
-            if (result.buttonIndex === 1) {
+            const result = await window.electronAPI.ipcRenderer.invoke('show-websocket-dialog');
+
+            // dialog.showMessageBox resolves with { response, checkboxChecked }
+            if (result && result.response === 1) {
                 // User clicked "Launch OBS"
                 await this.launchOBS();
             }
@@ -339,10 +347,13 @@ class OBSManager {
         return {
             obsAddress: document.getElementById('obs-address')?.value || 'ws://127.0.0.1:4455',
             obsPassword: document.getElementById('obs-password')?.value || '123456',
-            showScores: document.getElementById('show-scores')?.checked || true,
+            // `?? true` and not `|| true`: an unchecked box is `false`, which
+            // `||` would silently turn back into `true`.
+            showScores: document.getElementById('show-scores')?.checked ?? true,
             scoreInterval: parseInt(document.getElementById('score-interval')?.value) || 20000,
             transitionTime: parseInt(document.getElementById('transition-time')?.value) || 300,
             adsCount: parseInt(document.getElementById('ads-count')?.value) || 5,
+            videoDuration: parseInt(document.getElementById('video-duration')?.value) || 15000,
             videoPath: document.getElementById('video-path')?.value || 'data/PARTNERS_VIDEOS/'
         };
     }
@@ -456,6 +467,8 @@ class OBSManager {
                 'checking-images': '📷 Checking Images',
                 'converting-images': '🔄 Converting Images',
                 'preparing-obs': '⚙️ Preparing OBS',
+                'importing-collection': '🎞️ Importing Scenes',
+                'configuring-websocket': '🔌 Enabling WebSocket',
                 'launching-obs': '🚀 Launching OBS'
             };
             
