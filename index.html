@@ -464,6 +464,194 @@
             gap: 0.5rem;
         }
 
+        /* Log spans the automation and media rows; media sits under scenes */
+        .led-grid .led-log {
+            grid-column: 3;
+            grid-row: 2 / span 2;
+        }
+
+        .led-grid .led-media {
+            grid-column: 1 / span 2;
+            grid-row: 3;
+        }
+
+        /* Folder picker row */
+        .folder-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .folder-row input {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            font-size: 0.8125rem;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            min-height: 2.25rem;
+            box-sizing: border-box;
+        }
+
+        /* Stats */
+        .library-stats.is-loading {
+            opacity: 0.5;
+        }
+
+        .library-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .metric {
+            display: flex;
+            flex-direction: column;
+            gap: 0.125rem;
+            padding: 0.75rem;
+            background: hsl(var(--muted) / 0.6);
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+        }
+
+        .metric-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            line-height: 1.2;
+            color: hsl(var(--foreground));
+        }
+
+        .metric-label {
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .library-note {
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .library-note.warning {
+            color: hsl(var(--warning));
+            font-weight: 500;
+        }
+
+        .library-empty {
+            padding: 1.25rem;
+            text-align: center;
+            font-size: 0.8125rem;
+            color: hsl(var(--muted-foreground));
+            border: 1px dashed hsl(var(--border));
+            border-radius: var(--radius);
+        }
+
+        .library-empty code {
+            font-size: 0.75rem;
+            word-break: break-all;
+        }
+
+        /* Option checkboxes */
+        .library-options {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .library-options .option {
+            display: flex;
+            gap: 0.625rem;
+            align-items: flex-start;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .library-options .option input {
+            margin-top: 0.125rem;
+            flex: 0 0 auto;
+        }
+
+        /* Conversion progress, shown while the folder is being prepared */
+        .library-progress {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            background: hsl(var(--muted) / 0.4);
+        }
+
+        .library-progress-head {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .spinner-sm {
+            width: 0.875rem;
+            height: 0.875rem;
+            border: 2px solid hsl(var(--muted-foreground) / 0.3);
+            border-top-color: hsl(var(--primary));
+            border-radius: 50%;
+            display: inline-block;
+            animation: spin 1s linear infinite;
+            flex: 0 0 auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .library-progress-track {
+            height: 0.375rem;
+            border-radius: 999px;
+            background: hsl(var(--muted));
+            overflow: hidden;
+        }
+
+        .library-progress-bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            background: hsl(var(--primary));
+            transition: width 0.3s ease;
+        }
+
+        .option-note {
+            padding: 0.75rem;
+            border: 1px solid hsl(var(--border));
+            border-left: 2px solid hsl(var(--primary));
+            border-radius: var(--radius);
+            background: hsl(var(--muted) / 0.4);
+            font-size: 0.8125rem;
+        }
+
+        .option-note small {
+            display: block;
+            margin-top: 0.25rem;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .library-options .option small {
+            display: block;
+            margin-top: 0.125rem;
+            font-weight: 400;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            color: hsl(var(--muted-foreground));
+        }
+
         /* Primary actions pinned to the bottom of their panel */
         .panel-actions {
             margin-top: auto;
@@ -477,15 +665,32 @@
         }
 
         /* Responsive design */
+        /* Narrower screens drop the explicit placement and just flow */
         @media (max-width: 1280px) {
             .led-grid {
                 grid-template-columns: repeat(2, minmax(300px, 1fr));
+            }
+
+            .led-grid .led-log,
+            .led-grid .led-media {
+                grid-column: auto;
+                grid-row: auto;
+            }
+
+            .led-grid .led-media {
+                grid-column: 1 / -1;
             }
         }
 
         @media (max-width: 860px) {
             .led-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .led-grid .led-log,
+            .led-grid .led-media {
+                grid-column: auto;
+                grid-row: auto;
             }
         }
 
@@ -688,10 +893,6 @@
                             <input type="number" id="ads-count" value="5" min="1" max="20">
                         </div>
 
-                        <div class="setting-item" style="grid-column: 1 / -1;">
-                            <label for="video-path">Video directory</label>
-                            <input type="text" id="video-path" value="data/PARTNERS_VIDEOS/" placeholder="Base path for videos">
-                        </div>
                     </div>
 
                     <div class="panel-actions">
@@ -700,8 +901,60 @@
                     </div>
                 </div>
 
+                <!-- Media library -->
+                <div class="section led-media">
+                    <h2>
+                        <span>📁</span> Media Library
+                        <button class="btn btn-outline btn-sm refresh-btn" onclick="window.obsManager.refreshLibraryStats()">Refresh</button>
+                    </h2>
+
+                    <div class="folder-row">
+                        <input type="text" id="video-path" value="data/PARTNERS_VIDEOS/" placeholder="Folder holding the partner videos">
+                        <button class="btn btn-secondary" onclick="window.obsManager.selectVideoDirectory()">Browse…</button>
+                        <button class="btn btn-ghost btn-icon" onclick="window.obsManager.openVideoDirectory()" title="Open in Explorer">📂</button>
+                    </div>
+
+                    <div id="library-stats" class="library-stats">
+                        <div class="library-empty">Reading folder…</div>
+                    </div>
+
+                    <div id="library-progress" class="library-progress" hidden>
+                        <div class="library-progress-head">
+                            <span class="spinner spinner-sm"></span>
+                            <span id="library-progress-label">Converting media…</span>
+                        </div>
+                        <div class="library-progress-track">
+                            <div class="library-progress-bar" id="library-progress-bar"></div>
+                        </div>
+                    </div>
+
+                    <div class="library-options">
+                        <div class="option-note">
+                            <strong>Automatic conversion</strong>
+                            <small>
+                                PNG / JPG become 5 s MP4 clips, scaled to 1720px and centred on a
+                                1920×1080 black background. MOV / WEBM / MKV / AVI / WMV are re-encoded
+                                to H.264 baseline, 30 fps, no audio. Every original file is deleted once
+                                its conversion succeeds.
+                            </small>
+                        </div>
+
+                        <label class="option">
+                            <input type="checkbox" id="watch-folder" onchange="window.obsManager.toggleWatchdog()">
+                            <span>
+                                Watch the folder and update LOOP_IND automatically
+                                <small>Converts and syncs on its own whenever a file is added or removed.</small>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="panel-actions">
+                        <button class="btn btn-primary" id="sync-library-btn" onclick="window.obsManager.syncMediaLibrary()" disabled>Convert &amp; Sync LOOP_IND</button>
+                    </div>
+                </div>
+
                 <!-- Activity log -->
-                <div class="section">
+                <div class="section led-log">
                     <h2><span>📊</span> Activity Log</h2>
                     <div class="log-container" id="log-output">
                         <div class="log-entry info">LED Management interface ready</div>

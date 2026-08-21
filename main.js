@@ -2,6 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { setupIpcHandlers } = require('./js/ipcHandlers');
 const { cleanupOBS, updateSceneCollectionPaths } = require('./js/obsManager');
+const { stopWatching } = require('./js/videoLibrary');
 
 let mainWindow;
 
@@ -46,6 +47,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
     // Clean up OBS process when closing the app
     cleanupOBS();
+    stopWatching();
     
     if (process.platform !== 'darwin') {
         app.quit();
@@ -61,6 +63,7 @@ app.on('activate', () => {
 // Handle app quit
 app.on('before-quit', () => {
     cleanupOBS();
+    stopWatching();
 });
 
 // Export mainWindow for use in other modules

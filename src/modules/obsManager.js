@@ -7,6 +7,8 @@ class OBSManager {
         this.loopItems = {};
         this.connectionStatus = null;
         this.logContainer = null;
+        this.isWatching = false;
+        this.isConverting = false;
         this.init();
     }
 
@@ -15,6 +17,7 @@ class OBSManager {
         this.logContainer = document.getElementById('log-output');
         this.setupEventListeners();
         this.addLog('OBS Manager initialized', 'info');
+        this.refreshLibraryStats();
     }
 
     setupEventListeners() {
@@ -41,6 +44,20 @@ class OBSManager {
             case 'automation-error':
                 this.addLog(data.message, 'error');
                 break;
+            case 'media-sync-progress':
+                this.addLog(data.message, 'info');
+                break;
+            case 'media-sync-error':
+                this.addLog(data.message, 'error');
+                break;
+            case 'media-library-changed':
+                // Scene items were added or removed, so the cached ids are stale
+                this.refreshLibraryStats();
+                if (this.isConnected) {
+                    this.initializeScenes();
+                    this.refreshScenes();
+                }
+                break;
             case 'connection-closed':
                 this.updateConnectionStatus('disconnected', 'Connection lost');
                 this.addLog('Connection to OBS lost', 'error');
@@ -54,7 +71,13 @@ class OBSManager {
     handleLaunchProgress(data) {
         // Update progress dialog
         this.updateLaunchProgress(data.step, data.message);
-        
+
+        // The same conversion steps drive the media library panel when they run
+        // outside of an OBS launch (folder load, folder change, watchdog)
+        if (this.isConverting && String(data.step).startsWith('converting-')) {
+            this.updateLibraryProgress(data.message);
+        }
+
         // Add to log
         this.addLog(data.message, 'info');
     }
@@ -247,6 +270,219 @@ class OBSManager {
         }
     }
 
+    // --- Media library ----------------------------------------------------
+
+    getVideoDirectory() {
+        return document.getElementById('video-path')?.value || 'data/PARTNERS_VIDEOS/';
+    }
+
+    async selectVideoDirectory() {
+        try {
+            const result = await window.electronAPI.ipcRenderer.invoke(
+                'select-video-directory', this.getVideoDirectory());
+
+            if (result.canceled) return;
+
+            document.getElementById('video-path').value = result.directory;
+            this.addLog(`Media folder set to ${result.directory}`, 'success');
+
+            // A new folder means a new watch target
+            if (this.isWatching) {
+                await this.setWatchdog(true);
+            }
+            await this.refreshLibraryStats();
+        } catch (error) {
+            this.addLog(`Could not select folder: ${error.message}`, 'error');
+        }
+    }
+
+    async openVideoDirectory() {
+        await window.electronAPI.ipcRenderer.invoke('open-video-directory', this.getVideoDirectory());
+    }
+
+    async refreshLibraryStats() {
+        const container = document.getElementById('library-stats');
+        if (!container) return;
+
+        container.classList.add('is-loading');
+
+        try {
+            const result = await window.electronAPI.ipcRenderer.invoke(
+                'get-video-stats', this.getVideoDirectory());
+
+            if (!result.success) {
+                container.innerHTML = `<div class="library-empty">Error: ${result.error}</div>`;
+                return;
+            }
+
+            this.renderLibraryStats(result.stats);
+
+            // Anything not yet in MP4 is converted right away, so the folder is
+            // always ready to be mirrored into LOOP_IND.
+            if (result.stats.exists && result.stats.pendingCount > 0 && !this.isConverting) {
+                await this.convertPendingMedia(result.stats.pendingCount);
+            }
+        } catch (error) {
+            container.innerHTML = `<div class="library-empty">Error: ${error.message}</div>`;
+        } finally {
+            container.classList.remove('is-loading');
+        }
+    }
+
+    renderLibraryStats(stats) {
+        const container = document.getElementById('library-stats');
+        if (!container) return;
+
+        if (!stats.exists) {
+            container.innerHTML = `
+                <div class="library-empty">
+                    Folder not found:<br><code>${stats.directory}</code>
+                </div>`;
+            return;
+        }
+
+        const pendingRow = stats.pendingCount
+            ? `<div class="library-note warning">${stats.pendingCount} file(s) awaiting conversion to MP4</div>`
+            : '';
+        const ignoredRow = stats.ignoredCount
+            ? `<div class="library-note">${stats.ignoredCount} unsupported file(s) ignored</div>`
+            : '';
+        const unprobedRow = stats.unprobed
+            ? `<div class="library-note">${stats.unprobed} file(s) could not be probed</div>`
+            : '';
+
+        container.innerHTML = `
+            <div class="library-metrics">
+                <div class="metric">
+                    <span class="metric-value">${stats.playableCount}</span>
+                    <span class="metric-label">videos in loop</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">${stats.totalDurationLabel}</span>
+                    <span class="metric-label">total duration</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">${stats.averageDurationLabel}</span>
+                    <span class="metric-label">average clip</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">${stats.totalBytesLabel}</span>
+                    <span class="metric-label">on disk</span>
+                </div>
+            </div>
+            ${pendingRow}${ignoredRow}${unprobedRow}
+        `;
+    }
+
+    // Progress panel shown while ffmpeg works through the pending files
+    showLibraryProgress(label) {
+        this.conversionDone = 0;
+        const panel = document.getElementById('library-progress');
+        const text = document.getElementById('library-progress-label');
+        const bar = document.getElementById('library-progress-bar');
+
+        if (text) text.textContent = label;
+        if (bar) bar.style.width = '0%';
+        if (panel) panel.hidden = false;
+    }
+
+    updateLibraryProgress(message) {
+        const text = document.getElementById('library-progress-label');
+        const bar = document.getElementById('library-progress-bar');
+
+        if (text) text.textContent = message;
+
+        // mediaConverter reports "Converting name.png (2/5)..."
+        const match = /\((\d+)\s*\/\s*(\d+)\)/.exec(message);
+        if (bar && match) {
+            const [, done, total] = match;
+            bar.style.width = `${Math.round((Number(done) / Number(total)) * 100)}%`;
+        }
+    }
+
+    hideLibraryProgress() {
+        const panel = document.getElementById('library-progress');
+        if (panel) panel.hidden = true;
+    }
+
+    async convertPendingMedia(pendingCount) {
+        this.isConverting = true;
+        this.showLibraryProgress(`Converting ${pendingCount} file(s) to MP4…`);
+        this.addLog(`${pendingCount} file(s) need conversion, starting…`, 'info');
+
+        try {
+            const result = await window.electronAPI.ipcRenderer.invoke(
+                'sync-media-library', this.getVideoDirectory());
+
+            if (result.success) {
+                this.addLog('Media folder ready', 'success');
+            } else {
+                this.addLog(`Conversion finished with an error: ${result.error}`, 'warning');
+            }
+        } catch (error) {
+            this.addLog(`Conversion error: ${error.message}`, 'error');
+        } finally {
+            this.isConverting = false;
+            this.hideLibraryProgress();
+        }
+    }
+
+    async syncMediaLibrary() {
+        if (!this.isConnected) {
+            this.addLog('Connect to OBS before syncing the LOOP_IND scene', 'warning');
+            return;
+        }
+
+        const button = document.getElementById('sync-library-btn');
+        if (button) button.disabled = true;
+
+        try {
+            this.addLog('Syncing LOOP_IND with the media folder...', 'info');
+            const result = await window.electronAPI.ipcRenderer.invoke(
+                'sync-media-library', this.getVideoDirectory());
+
+            if (result.success) {
+                this.addLog(
+                    `Sync done: ${result.added.length} added, ${result.removed.length} removed, ${result.kept} unchanged`,
+                    'success');
+                (result.failed || []).forEach(f => this.addLog(`Could not add ${f.name}: ${f.error}`, 'error'));
+            } else {
+                this.addLog(`Sync failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.addLog(`Sync error: ${error.message}`, 'error');
+        } finally {
+            if (button) button.disabled = !this.isConnected;
+        }
+    }
+
+    async setWatchdog(enabled) {
+        try {
+            const result = await window.electronAPI.ipcRenderer.invoke(
+                'watch-video-directory', this.getVideoDirectory(), enabled);
+
+            this.isWatching = Boolean(result.watching);
+
+            const checkbox = document.getElementById('watch-folder');
+            if (checkbox) checkbox.checked = this.isWatching;
+
+            if (enabled && !result.success) {
+                this.addLog(`Watchdog could not start: ${result.error}`, 'error');
+            } else if (this.isWatching) {
+                this.addLog(`Watching ${result.directory} for changes`, 'success');
+            } else {
+                this.addLog('Folder watchdog stopped', 'info');
+            }
+        } catch (error) {
+            this.addLog(`Watchdog error: ${error.message}`, 'error');
+        }
+    }
+
+    toggleWatchdog() {
+        const checkbox = document.getElementById('watch-folder');
+        this.setWatchdog(Boolean(checkbox && checkbox.checked));
+    }
+
     updateConnectionStatus(status, message) {
         if (this.connectionStatus) {
             this.connectionStatus.className = `connection-status ${status}`;
@@ -260,8 +496,8 @@ class OBSManager {
     updateButtonStates() {
         const controlButtons = [
             'connect-btn', 'disconnect-btn', 'refresh-scenes-btn', 
-            'goto-scores-btn', 'goto-loop-btn', 'show-scores-btn', 
-            'init-scenes-btn', 'start-automation-btn'
+            'goto-scores-btn', 'goto-loop-btn', 'show-scores-btn',
+            'init-scenes-btn', 'start-automation-btn', 'sync-library-btn'
         ];
         
         controlButtons.forEach(id => {
