@@ -1,13 +1,19 @@
 {
   "name": "obs-main-led",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Application to manage Node.js, OBS, FFmpeg and FFprobe",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "electron . --dev",
+    "dist": "electron-builder --win --publish never"
   },
-  "keywords": ["electron", "obs", "ffmpeg", "node"],
+  "keywords": [
+    "electron",
+    "obs",
+    "ffmpeg",
+    "node"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -15,6 +21,37 @@
     "obs-websocket-js": "^5.0.5"
   },
   "devDependencies": {
-    "electron": "^28.0.0"
+    "electron": "^28.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.itjrc.obs-main-led",
+    "productName": "OBS Main LED",
+    "directories": {
+      "output": "dist"
+    },
+    "asar": false,
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "js/**/*",
+      "src/**/*",
+      "package.json",
+      "data/obs-scene-collection.json",
+      "data/itjr.jpg"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "artifactName": "${productName}-${version}-win-${arch}.${ext}"
   }
 }

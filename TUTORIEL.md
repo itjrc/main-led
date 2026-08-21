@@ -211,7 +211,57 @@ maintient les trois en cohérence.
 
 ---
 
-## 7. Dépannage courant
+## 7. Version, build et publication
+
+La version affichée dans l'en-tête de l'application vient de `package.json`.
+Survolez le badge pour voir aussi les versions d'Electron, Node et Chromium —
+utile dans un rapport de bug.
+
+### Construire l'artefact localement
+
+```bash
+.\provider\node\npm.cmd run dist
+```
+
+Produit `dist/OBS Main LED-<version>-win-x64.zip` (~105 Mo). Décompressez-le où
+vous voulez et lancez `OBS Main LED.exe` : ni Node ni `start.bat` ne sont requis,
+Electron est embarqué.
+
+Deux choix de packaging à ne pas défaire :
+
+- **`asar: false`** — l'application écrit dans `provider/` et `data/` à côté de
+  `__dirname`. Dans une archive asar, ces chemins sont en lecture seule et le
+  téléchargement d'OBS comme le lancement échoueraient.
+- **cible `zip`, pas `portable`** — une cible `portable` se décompresse dans un
+  dossier temporaire neuf à chaque exécution, ce qui jetterait `provider/` et donc
+  l'installation d'OBS à chaque démarrage.
+
+Les médias (`PARTNERS`, `PARTNERS_VIDEOS`, `PARTNERS_LOGO`) et `provider/` ne sont
+pas embarqués : ce sont respectivement votre contenu et des dépendances
+téléchargées à l'exécution. Après la première décompression, passez par l'onglet
+Setup pour installer OBS et FFmpeg.
+
+### Publier une version
+
+Le workflow [`.github/workflows/build.yml`](.github/workflows/build.yml) construit
+l'artefact à chaque push sur `master`, sur chaque pull request et à la demande. Sur
+un tag `v*`, il publie en plus une release GitHub avec le zip.
+
+```bash
+git tag -a v1.2.0 -m "Description de la version"
+```
+
+```bash
+git push origin v1.2.0
+```
+
+> ⚠️ Mettez `package.json` à jour **avant** de poser le tag. Le workflow refuse la
+> release si le tag et la version du manifeste diffèrent, pour éviter de publier un
+> artefact dont le nom de fichier et la version affichée ne correspondent pas.
+
+---
+
+## 8. Dépannage courant
 
 **« L'exécution de scripts est désactivée sur ce système »**
 Utilisez `start.bat`, qui passe déjà `-ExecutionPolicy Bypass`.

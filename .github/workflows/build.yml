@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows artifact
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Same version setup-node.ps1 installs locally, so CI and a developer
+      # machine run the app on the same runtime.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # There is no test suite yet; parsing every file at least catches a
+      # syntax error before it reaches an artifact.
+      - name: Syntax check
+        shell: bash
+        run: |
+          set -e
+          for file in main.js preload.js renderer.js js/*.js src/modules/*.js src/components/ui/*.js; do
+            node --check "$file"
+          done
+          echo "All files parsed."
+
+      # A tag that disagrees with package.json would ship an artifact whose
+      # file name and in-app version do not match the release.
+      - name: Check tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(node -p "require('./package.json').version")
+          echo "tag=$tag package.json=$manifest"
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::Tag v$tag does not match package.json version $manifest"
+            exit 1
+          fi
+
+      - name: Build
+        run: npm run dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-main-led-windows-x64
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
