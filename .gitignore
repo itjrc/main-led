@@ -3,3 +3,7 @@ data/PARTNERS_LOGO/**
 data/PARTNERS_VIDEOS/**
 provider/**
 .idea/**
+temp/**
+node-v*.zip
+temp-node-extract/**
+dist/**
