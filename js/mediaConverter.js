@@ -2,6 +2,36 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// Converted source files are moved here rather than deleted, so a bad or
+// unwanted conversion can always be undone. It lives inside the media folder;
+// scanDirectory() skips directories, so it never shows up as a clip.
+const ORIGINALS_FOLDER = 'ORIGINAL';
+
+// Move a converted source file into <mediaFolder>/ORIGINAL/, keeping both if a
+// file of that name is already archived.
+function archiveOriginal(filePath) {
+    const archiveDir = path.join(path.dirname(filePath), ORIGINALS_FOLDER);
+
+    try {
+        fs.mkdirSync(archiveDir, { recursive: true });
+
+        const ext = path.extname(filePath);
+        const base = path.basename(filePath, ext);
+
+        let target = path.join(archiveDir, path.basename(filePath));
+        let attempt = 2;
+        while (fs.existsSync(target)) {
+            target = path.join(archiveDir, `${base} (${attempt})${ext}`);
+            attempt++;
+        }
+
+        fs.renameSync(filePath, target);
+        return { success: true, target };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
 // Convert PNG/JPG images to MP4 videos
 async function convertImageToVideo(imagePath) {
     return new Promise((resolve, reject) => {
@@ -11,7 +41,9 @@ async function convertImageToVideo(imagePath) {
             return;
         }
 
-        const outputPath = imagePath.replace(ext, '.mp4');
+        // Replace only the trailing extension: imagePath.replace(ext, ...) would
+        // hit the first match anywhere in the path.
+        const outputPath = imagePath.substring(0, imagePath.lastIndexOf('.')) + '.mp4';
         const ffmpegPath = path.join(__dirname, '..', 'provider', 'ffmpeg', 'bin', 'ffmpeg.exe');
         
         if (!fs.existsSync(ffmpegPath)) {
@@ -50,14 +82,14 @@ async function convertImageToVideo(imagePath) {
 
         ffmpegProcess.on('close', (code) => {
             if (code === 0) {
-                // Delete the original image file
-                try {
-                    fs.unlinkSync(imagePath);
-                    console.log(`Original image file deleted: ${imagePath}`);
-                } catch (deleteError) {
-                    console.log(`Warning: Could not delete original file: ${deleteError.message}`);
+                // Keep the source image in ORIGINAL/ instead of deleting it
+                const archived = archiveOriginal(imagePath);
+                if (archived.success) {
+                    console.log(`Original image moved to: ${archived.target}`);
+                } else {
+                    console.log(`Warning: Could not archive original file: ${archived.error}`);
                 }
-                
+
                 resolve({
                     success: true,
                     message: `Successfully converted ${path.basename(imagePath)} to MP4`,
@@ -134,14 +166,14 @@ async function convertVideoToMP4(videoPath) {
 
         ffmpegProcess.on('close', (code) => {
             if (code === 0) {
-                // Delete the original video file
-                try {
-                    fs.unlinkSync(videoPath);
-                    console.log(`Original video file deleted: ${videoPath}`);
-                } catch (deleteError) {
-                    console.log(`Warning: Could not delete original file: ${deleteError.message}`);
+                // Keep the source video in ORIGINAL/ instead of deleting it
+                const archived = archiveOriginal(videoPath);
+                if (archived.success) {
+                    console.log(`Original video moved to: ${archived.target}`);
+                } else {
+                    console.log(`Warning: Could not archive original file: ${archived.error}`);
                 }
-                
+
                 resolve({
                     success: true,
                     message: `Successfully converted ${path.basename(videoPath)} to MP4`,

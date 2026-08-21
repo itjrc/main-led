@@ -114,7 +114,7 @@ mkdir -p data/PARTNERS_VIDEOS data/PARTNERS_LOGO
     sont convertis en MP4 au lancement d'OBS
   - `.png`, `.jpg`, `.jpeg` sont convertis en vidéos MP4 de 5 s (image centrée,
     largeur 1720 px, sur fond noir 1920×1080)
-  - **Les fichiers sources sont supprimés après une conversion réussie** — gardez une copie ailleurs
+  - Les fichiers sources sont déplacés dans `ORIGINAL/` après conversion, jamais supprimés
   - Durée recommandée : 15 s (l'automatisation change de vidéo toutes les 15 s)
 - `data/PARTNERS_LOGO/` — images du diaporama de logos
 
@@ -129,8 +129,11 @@ Le panneau **Media Library** de l'onglet LED Control gère ce dossier :
   `ffprobe`. Les fichiers non gérés sont comptés à part et ignorés.
 - **La conversion est automatique et obligatoire.** Au chargement du dossier, à
   chaque changement de dossier et à chaque lancement d'OBS, tout ce qui n'est pas
-  du MP4 est converti, avec une barre de progression dans le panneau. Le fichier
-  d'origine est supprimé une fois la conversion réussie.
+  du MP4 est converti, avec une barre de progression dans le panneau.
+- **Les fichiers d'origine ne sont pas supprimés** : ils sont déplacés dans un
+  sous-dossier `ORIGINAL/` du dossier média. En cas d'homonyme déjà archivé, le
+  nouveau est suffixé (`clip (2).mov`). Ce sous-dossier est ignoré par les
+  statistiques, par la synchronisation et par le watchdog.
 - **Convert & Sync LOOP_IND** convertit puis met la scène `LOOP_IND` en miroir du
   dossier : une source est créée pour chaque nouveau MP4, les sources dont le
   fichier a disparu sont retirées.
