@@ -40,7 +40,8 @@
       "src/**/*",
       "package.json",
       "data/obs-scene-collection.json",
-      "data/itjr.jpg"
+      "data/itjr.jpg",
+      "assets/**/*"
     ],
     "win": {
       "target": [
@@ -50,7 +51,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "assets/icon.png"
     },
     "artifactName": "${productName}-${version}-win-${arch}.${ext}"
   }

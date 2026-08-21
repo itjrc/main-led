@@ -63,6 +63,14 @@
             border-bottom: 1px solid hsl(var(--border));
             padding: 1.5rem;
             background: hsl(var(--background));
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-logo {
+            flex: 0 0 auto;
+            border-radius: 0.75rem;
         }
 
         .header h1 {
@@ -734,8 +742,11 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>OBS Main LED <span class="version-badge" id="app-version" title="Application version">—</span></h1>
-            <p>Application Manager & LED Control System</p>
+            <img src="assets/logo.svg" alt="" class="header-logo" width="52" height="52">
+            <div>
+                <h1>OBS Main LED <span class="version-badge" id="app-version" title="Application version">—</span></h1>
+                <p>Application Manager &amp; LED Control System</p>
+            </div>
         </div>
         
         <!-- Navigation Tabs -->

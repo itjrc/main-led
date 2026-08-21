@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="OBS Main LED">
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#26344c"/>
+      <stop offset="100%" stop-color="#0d1526"/>
+    </linearGradient>
+
+    <linearGradient id="play" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6ee7a0"/>
+      <stop offset="55%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#15964a"/>
+    </linearGradient>
+
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- LED pixel grid: dark seams between cells, invisible once downscaled -->
+    <pattern id="matrix" width="34" height="34" patternUnits="userSpaceOnUse">
+      <rect width="34" height="34" fill="none"/>
+      <path d="M0 0 H34 M0 0 V34" stroke="#060b14" stroke-width="7" stroke-opacity="0.45"/>
+    </pattern>
+
+    <clipPath id="panelClip">
+      <rect x="10" y="10" width="492" height="492" rx="112"/>
+    </clipPath>
+  </defs>
+
+  <rect x="10" y="10" width="492" height="492" rx="112" fill="url(#panel)"/>
+
+  <g clip-path="url(#panelClip)">
+    <path d="M170 148 L366 256 L170 364 Z"
+          fill="url(#play)" stroke="url(#play)" stroke-width="26"
+          stroke-linejoin="round" filter="url(#glow)"/>
+
+    <rect x="10" y="10" width="492" height="492" fill="url(#matrix)"/>
+  </g>
+
+  <rect x="10" y="10" width="492" height="492" rx="112"
+        fill="none" stroke="#55688a" stroke-width="12"/>
+</svg>
