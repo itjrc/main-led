@@ -118,10 +118,31 @@ mkdir -p data/PARTNERS_VIDEOS data/PARTNERS_LOGO
   - Durée recommandée : 15 s (l'automatisation change de vidéo toutes les 15 s)
 - `data/PARTNERS_LOGO/` — images du diaporama de logos
 
-> ⚠️ Ajouter une vidéo dans le dossier ne l'ajoute **pas** automatiquement à la
-> scène `LOOP_IND` d'OBS. La collection de scènes contient une liste figée de
-> sources. Pour un nouveau partenaire, il faut ajouter la source manuellement
-> dans OBS (voir [Limites connues](#6-limites-connues)).
+### Panneau Media Library
+
+Le panneau **Media Library** de l'onglet LED Control gère ce dossier :
+
+- **Browse…** ouvre le sélecteur de dossier Windows ; 📂 ouvre le dossier dans
+  l'Explorateur. Le chemin peut être absolu ou relatif à la racine du projet.
+- Les statistiques affichent le nombre de vidéos de la boucle, la **durée totale**,
+  la **durée moyenne** d'un clip et la taille sur disque. Les durées sont lues avec
+  `ffprobe`. Les fichiers non gérés sont comptés à part et ignorés.
+- **La conversion est automatique et obligatoire.** Au chargement du dossier, à
+  chaque changement de dossier et à chaque lancement d'OBS, tout ce qui n'est pas
+  du MP4 est converti, avec une barre de progression dans le panneau. Le fichier
+  d'origine est supprimé une fois la conversion réussie.
+- **Convert & Sync LOOP_IND** convertit puis met la scène `LOOP_IND` en miroir du
+  dossier : une source est créée pour chaque nouveau MP4, les sources dont le
+  fichier a disparu sont retirées.
+- **Watch the folder** active un watchdog : toute modification du dossier
+  (ajout, suppression) relance conversion + synchronisation toute seule, après
+  2 secondes de temporisation pour absorber les copies en rafale.
+
+Les sources créées reprennent la mise en forme de la collection livrée :
+`ffmpeg_source`, cadrage *scale inner* 1920×1080, masquée jusqu'à ce que
+l'automatisation l'affiche. Elles sont aussi réglées sur **close when inactive**,
+sans quoi OBS garde un verrou sur chaque fichier et Windows refuse de supprimer
+une vidéo tant qu'OBS tourne.
 
 ---
 
@@ -155,7 +176,8 @@ mkdir -p data/PARTNERS_VIDEOS data/PARTNERS_LOGO
 | Score interval (ms) | 20000 | Durée d'affichage de chaque score |
 | Transition time (ms) | 300 | Délai avant le passage aux scores |
 | Videos between scores | 5 | Nombre de vidéos entre deux blocs de scores |
-| Video directory | `data/PARTNERS_VIDEOS/` | Champ informatif, non utilisé par le backend |
+
+Le dossier des médias se règle dans le panneau **Media Library**, pas ici.
 
 Les réglages sont lus **au moment où vous cliquez sur Start Automation**. Pour les
 changer, arrêtez puis redémarrez l'automatisation.
@@ -180,9 +202,9 @@ maintient les trois en cohérence.
 
 | Symptôme | Cause | Contournement |
 |---|---|---|
-| Une nouvelle vidéo dans `PARTNERS_VIDEOS` n'apparaît pas dans la boucle | Aucun code ne crée de source OBS ; `LOOP_IND` contient une liste figée | Ajouter la source à la main dans OBS, puis **Initialize** |
 | `data/obs-scene-collection.json` apparaît modifié dans git après chaque lancement | `updateSceneCollectionPaths()` réécrit le fichier source au lieu de la copie dans `provider/` | Normal si le projet a changé d'emplacement ; sinon `git checkout data/obs-scene-collection.json` |
-| Le champ « Video directory » ne change rien | Il n'est lu par aucun handler ; le chemin des médias est toujours `data/PARTNERS_VIDEOS/` | — |
+| OBS reste actif quelques secondes à la fermeture de l'application | OBS enregistre sa configuration puis se bloque dans `obs_module_unload` d'obs-websocket. L'app attend 8 s après l'enregistrement, puis termine le processus | Aucun ; la collection de scènes est bien sauvegardée avant |
+| Une vidéo supprimée réapparaît dans `LOOP_IND` au lancement suivant | La collection livrée `data/obs-scene-collection.json` est réinstallée à chaque lancement d'OBS avec ses 25 sources d'origine | Lancer **Convert & Sync LOOP_IND** après le démarrage, ou laisser le watchdog actif |
 
 ---
 
