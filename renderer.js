@@ -54,6 +54,22 @@ function toggleScoreSettings() {
     }
 }
 
+async function showAppVersion() {
+    const badge = document.getElementById('app-version');
+    if (!badge) return;
+
+    try {
+        const info = await window.electronAPI.ipcRenderer.invoke('get-app-info');
+        badge.textContent = `v${info.version}`;
+        badge.title = `OBS Main LED v${info.version}\n`
+            + `Electron ${info.electron} · Node ${info.node} · Chromium ${info.chrome}\n`
+            + `${info.platform}${info.packaged ? '' : ' · development'}`;
+    } catch (error) {
+        badge.textContent = 'v?';
+        console.error('Error reading app version:', error);
+    }
+}
+
 async function checkNodeVersion() {
     try {
         const result = await window.electronAPI.ipcRenderer.invoke('get-node-version');
@@ -216,6 +232,7 @@ window.electronAPI.ipcRenderer.on('download-progress', (data) => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+    showAppVersion();
     refreshAll();
     
     // Initialize UI components

@@ -1,4 +1,4 @@
-const { ipcMain, shell } = require('electron');
+const { app, ipcMain, shell } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -185,7 +185,29 @@ function runExecutable(exePath, args) {
     });
 }
 
+// Read the version straight from our own package.json. app.getVersion() falls
+// back to Electron's own version when it cannot resolve the app manifest, which
+// silently displays 28.3.3 instead of failing.
+function appVersion() {
+    try {
+        return require(path.join(__dirname, '..', 'package.json')).version;
+    } catch (error) {
+        console.log(`Could not read version from package.json: ${error.message}`);
+        return app.getVersion();
+    }
+}
+
 function setupSystemHandlers(mainWindow) {
+    // Version and runtime info, shown in the header and useful in bug reports.
+    ipcMain.handle('get-app-info', async () => ({
+        version: appVersion(),
+        electron: process.versions.electron,
+        node: process.versions.node,
+        chrome: process.versions.chrome,
+        platform: `${process.platform}-${process.arch}`,
+        packaged: app.isPackaged
+    }));
+
     const sendProgress = (payload) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('download-progress', payload);

@@ -79,6 +79,20 @@
             font-size: 0.875rem;
         }
 
+        .version-badge {
+            display: inline-block;
+            margin-left: 0.5rem;
+            padding: 0.125rem 0.5rem;
+            border: 1px solid hsl(var(--border));
+            border-radius: 999px;
+            background: hsl(var(--muted));
+            color: hsl(var(--muted-foreground));
+            font-size: 0.6875rem;
+            font-weight: 500;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            vertical-align: middle;
+        }
+
         .nav-tabs {
             display: flex;
             border-bottom: 1px solid hsl(var(--border));
@@ -720,7 +734,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>OBS Main LED</h1>
+            <h1>OBS Main LED <span class="version-badge" id="app-version" title="Application version">—</span></h1>
             <p>Application Manager & LED Control System</p>
         </div>
         
