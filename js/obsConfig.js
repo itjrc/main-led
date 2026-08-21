@@ -105,6 +105,24 @@ function updateIniSection(iniText, section, updates) {
     return lines.join(eol);
 }
 
+// OBS drops a zero-byte "safe_mode" sentinel at startup and removes it on a
+// clean exit. If it survives, the next launch opens a modal offering safe mode,
+// which disables WebSockets entirely - the app could then never connect. Clear
+// it so an unattended launch is never blocked by that prompt.
+function clearSafeModeSentinel() {
+    const sentinel = path.join(OBS_CONFIG_DIR, 'safe_mode');
+    try {
+        if (fs.existsSync(sentinel)) {
+            fs.unlinkSync(sentinel);
+            console.log('Cleared stale safe_mode sentinel from a previous unclean shutdown');
+            return { success: true, cleared: true };
+        }
+        return { success: true, cleared: false };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
 // Tell OBS which scene collection to open. Passing --collection alone is not
 // enough on a profile that already has a different collection selected.
 function selectSceneCollection() {
@@ -127,7 +145,12 @@ function selectSceneCollection() {
         const hasBom = original.charCodeAt(0) === 0xfeff;
         const body = hasBom ? original.slice(1) : original;
 
-        const updated = updateIniSection(body, 'Basic', updates);
+        let updated = updateIniSection(body, 'Basic', updates);
+
+        // The app closes OBS on quit; an "are you sure?" modal would hang that
+        // shutdown and leave the safe_mode sentinel behind.
+        updated = updateIniSection(updated, 'General', { ConfirmOnExit: 'false' });
+
         fs.writeFileSync(GLOBAL_INI, (hasBom ? '﻿' : '') + updated, 'utf8');
 
         console.log(`global.ini now selects scene collection "${SCENE_COLLECTION_NAME}"`);
@@ -174,6 +197,7 @@ module.exports = {
     SCENE_COLLECTION_NAME,
     installSceneCollection,
     selectSceneCollection,
+    clearSafeModeSentinel,
     configureWebSocketServer,
     updateIniSection
 };

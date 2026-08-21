@@ -7,6 +7,7 @@ const {
     SCENE_COLLECTION_NAME,
     installSceneCollection,
     selectSceneCollection,
+    clearSafeModeSentinel,
     configureWebSocketServer
 } = require('./obsConfig');
 
@@ -83,7 +84,10 @@ async function launchOBS(mainWindow, options = {}) {
             console.log(websocket.error);
         }
 
-        // Step 5: Launch OBS
+        // Step 5: Launch OBS. Clear the crash sentinel first, otherwise OBS
+        // opens a safe-mode prompt that also disables its WebSocket server.
+        clearSafeModeSentinel();
+
         sendProgress('launching-obs', 'Launching OBS Studio...');
 
         const obsArgs = ['--portable', '--collection', SCENE_COLLECTION_NAME];
