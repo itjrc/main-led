@@ -49,7 +49,8 @@
         }
 
         .container {
-            max-width: 1200px;
+            /* Full width: the LED control board needs the horizontal space */
+            max-width: none;
             margin: 0 auto;
             background: hsl(var(--background));
             border-radius: var(--radius);
@@ -363,18 +364,150 @@
             accent-color: hsl(var(--primary));
         }
 
+        /* The setup tab is a reading layout, so keep it narrow and centred */
+        #setup-tab {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        /* ===== LED Control board ===== */
+        .led-grid {
+            display: grid;
+            grid-template-columns: minmax(300px, 1fr) minmax(340px, 1.1fr) minmax(340px, 1.3fr);
+            gap: 1rem;
+        }
+
+        .led-grid > .span-all {
+            grid-column: 1 / -1;
+        }
+
+        /* Columns share one row, so every panel is the same height.
+           The connection bar is excluded: it lays out as a row. */
+        .led-grid .section:not(.led-bar) {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Connection bar across the top */
+        .led-bar {
+            display: flex;
+            flex-flow: row wrap;
+            align-items: flex-end;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+        }
+
+        .led-bar .connection-status {
+            margin-bottom: 0;
+            flex: 0 0 auto;
+            min-width: 14rem;
+        }
+
+        .led-bar-fields {
+            display: flex;
+            gap: 0.75rem;
+            flex: 1 1 24rem;
+            min-width: 0;
+        }
+
+        .led-bar-fields .input-group {
+            margin-bottom: 0;
+            flex: 1 1 0;
+            min-width: 0;
+        }
+
+        .led-bar-fields label {
+            font-size: 0.75rem;
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 0.25rem;
+        }
+
+        .led-bar-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex: 0 0 auto;
+        }
+
+        /* Sub-heading inside a panel */
+        .panel-divider {
+            margin: 1.25rem 0 0.75rem;
+            padding-top: 1rem;
+            border-top: 1px solid hsl(var(--border));
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: hsl(var(--muted-foreground));
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Let the scrolling areas absorb the extra height */
+        .led-grid .scene-list {
+            flex: 1 1 auto;
+            max-height: none;
+            min-height: 11rem;
+        }
+
+        .led-grid .log-container {
+            flex: 1 1 auto;
+            max-height: none;
+            min-height: 26rem;
+        }
+
+        .led-grid .controls-grid {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            margin-top: 0;
+        }
+
+        .manual-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        /* Primary actions pinned to the bottom of their panel */
+        .panel-actions {
+            margin-top: auto;
+            padding-top: 1.25rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .panel-actions .btn {
+            flex: 1;
+        }
+
         /* Responsive design */
+        @media (max-width: 1280px) {
+            .led-grid {
+                grid-template-columns: repeat(2, minmax(300px, 1fr));
+            }
+        }
+
+        @media (max-width: 860px) {
+            .led-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @media (max-width: 768px) {
             body {
                 padding: 0.5rem;
             }
-            
+
             .content-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .controls-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .led-bar-actions {
+                width: 100%;
+            }
+
+            .led-bar-actions .btn {
+                flex: 1;
             }
         }
     </style>
@@ -473,108 +606,108 @@
 
         <!-- LED Control Tab Content -->
         <div id="led-control-tab-content" class="tab-content">
-            <div class="content-grid">
-                <!-- Connection Panel -->
-                <div class="section">
-                    <h2><span>🔗</span> Connection</h2>
-                    
+            <div class="led-grid">
+
+                <!-- Connection bar -->
+                <div class="section led-bar span-all">
                     <div class="connection-status disconnected" id="connection-status">
                         Disconnected from OBS
                     </div>
 
-                    <div class="input-group">
-                        <label>WebSocket Address</label>
-                        <input type="text" id="obs-address" value="ws://127.0.0.1:4455" placeholder="ws://127.0.0.1:4455">
+                    <div class="led-bar-fields">
+                        <div class="input-group">
+                            <label for="obs-address">WebSocket Address</label>
+                            <input type="text" id="obs-address" value="ws://127.0.0.1:4455" placeholder="ws://127.0.0.1:4455">
+                        </div>
+                        <div class="input-group">
+                            <label for="obs-password">Password</label>
+                            <input type="password" id="obs-password" value="123456" placeholder="Enter password">
+                        </div>
                     </div>
 
-                    <div class="input-group">
-                        <label>Password</label>
-                        <input type="password" id="obs-password" value="123456" placeholder="Enter password">
-                    </div>
-
-                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <div class="led-bar-actions">
                         <button class="btn btn-success" id="launch-obs-btn" onclick="window.obsManager.launchOBS()">Launch OBS</button>
                         <button class="btn btn-primary" id="connect-btn" onclick="window.obsManager.connectToOBS()">Connect</button>
                         <button class="btn btn-destructive" id="disconnect-btn" onclick="window.obsManager.disconnectFromOBS()" disabled>Disconnect</button>
                     </div>
                 </div>
 
-                <!-- Scene Control Panel -->
+                <!-- Scenes + manual controls -->
                 <div class="section">
-                    <h2><span>🎬</span> Scenes</h2>
-                    
+                    <h2>
+                        <span>🎬</span> Scenes
+                        <button class="btn btn-outline btn-sm refresh-btn" onclick="window.obsManager.refreshScenes()" disabled id="refresh-scenes-btn">Refresh</button>
+                    </h2>
+
                     <div class="scene-list" id="scene-list">
                         <div style="padding: 1.5rem; text-align: center; color: hsl(var(--muted-foreground));">
                             Connect to OBS to view scenes
                         </div>
                     </div>
 
-                    <div style="margin-top: 1rem;">
-                        <button class="btn btn-outline" onclick="window.obsManager.refreshScenes()" disabled id="refresh-scenes-btn">Refresh Scenes</button>
-                    </div>
-                </div>
+                    <div class="panel-divider">Manual controls</div>
 
-                <!-- Automation Settings Panel -->
-                <div class="section">
-                    <h2><span>⚙️</span> Automation</h2>
-                    
-                    <div class="controls-grid">
-                        <div class="setting-item">
-                            <label>
-                                <input type="checkbox" id="show-scores" checked style="margin-right: 0.5rem;">
-                                Include scores in automation
-                            </label>
-                            <small style="color: hsl(var(--muted-foreground)); display: block; margin-top: 0.25rem; font-size: 0.75rem;">
-                                When disabled, only partner videos will loop
-                            </small>
-                        </div>
-                        
-                        <div class="setting-item" id="score-interval-setting">
-                            <label>Score interval (ms)</label>
-                            <input type="number" id="score-interval" value="20000" min="1000" max="60000">
-                        </div>
-                        
-                        <div class="setting-item">
-                            <label>Transition time (ms)</label>
-                            <input type="number" id="transition-time" value="300" min="100" max="2000">
-                        </div>
-                        
-                        <div class="setting-item" id="ads-count-setting">
-                            <label>Videos between scores</label>
-                            <input type="number" id="ads-count" value="5" min="1" max="20">
-                        </div>
-
-                        <div class="setting-item" style="grid-column: 1 / -1;">
-                            <label>Video directory</label>
-                            <input type="text" id="video-path" value="data/PARTNERS_VIDEOS/" placeholder="Base path for videos">
-                        </div>
-                    </div>
-
-                    <div style="margin-top: 1.5rem; display: flex; gap: 0.5rem;">
-                        <button class="btn btn-success" onclick="window.obsManager.startAutomation()" disabled id="start-automation-btn">Start Automation</button>
-                        <button class="btn btn-warning" onclick="window.obsManager.stopAutomation()" disabled id="stop-automation-btn">Stop Automation</button>
-                    </div>
-                </div>
-
-                <!-- Manual Controls Panel -->
-                <div class="section">
-                    <h2><span>🎮</span> Manual Controls</h2>
-                    
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem;">
-                        <button class="btn btn-outline" onclick="window.obsManager.goToScene('SCORES')" disabled id="goto-scores-btn">Scores</button>
-                        <button class="btn btn-outline" onclick="window.obsManager.goToScene('LOOP_IND')" disabled id="goto-loop-btn">Loop</button>
+                    <div class="manual-grid">
+                        <button class="btn btn-outline" onclick="window.obsManager.goToScene('SCORES')" disabled id="goto-scores-btn">Go to Scores</button>
+                        <button class="btn btn-outline" onclick="window.obsManager.goToScene('LOOP_IND')" disabled id="goto-loop-btn">Go to Loop</button>
                         <button class="btn btn-primary" onclick="window.obsManager.showScores()" disabled id="show-scores-btn">Show Scores</button>
                         <button class="btn btn-secondary" onclick="window.obsManager.initializeScenes()" disabled id="init-scenes-btn">Initialize</button>
                     </div>
                 </div>
 
-                <!-- Activity Log Panel -->
-                <div class="section full-width">
+                <!-- Automation -->
+                <div class="section">
+                    <h2><span>⚙️</span> Automation</h2>
+
+                    <div class="setting-item" style="margin-bottom: 1rem;">
+                        <label>
+                            <input type="checkbox" id="show-scores" checked style="margin-right: 0.5rem;">
+                            Include scores in automation
+                        </label>
+                        <small>When disabled, only partner videos will loop</small>
+                    </div>
+
+                    <div class="controls-grid">
+                        <div class="setting-item">
+                            <label for="video-duration">Video duration (ms)</label>
+                            <input type="number" id="video-duration" value="15000" min="1000" max="120000" step="1000">
+                        </div>
+
+                        <div class="setting-item" id="score-interval-setting">
+                            <label for="score-interval">Score interval (ms)</label>
+                            <input type="number" id="score-interval" value="20000" min="1000" max="60000">
+                        </div>
+
+                        <div class="setting-item">
+                            <label for="transition-time">Transition time (ms)</label>
+                            <input type="number" id="transition-time" value="300" min="100" max="2000">
+                        </div>
+
+                        <div class="setting-item" id="ads-count-setting">
+                            <label for="ads-count">Videos between scores</label>
+                            <input type="number" id="ads-count" value="5" min="1" max="20">
+                        </div>
+
+                        <div class="setting-item" style="grid-column: 1 / -1;">
+                            <label for="video-path">Video directory</label>
+                            <input type="text" id="video-path" value="data/PARTNERS_VIDEOS/" placeholder="Base path for videos">
+                        </div>
+                    </div>
+
+                    <div class="panel-actions">
+                        <button class="btn btn-success" onclick="window.obsManager.startAutomation()" disabled id="start-automation-btn">Start Automation</button>
+                        <button class="btn btn-warning" onclick="window.obsManager.stopAutomation()" disabled id="stop-automation-btn">Stop Automation</button>
+                    </div>
+                </div>
+
+                <!-- Activity log -->
+                <div class="section">
                     <h2><span>📊</span> Activity Log</h2>
                     <div class="log-container" id="log-output">
                         <div class="log-entry info">LED Management interface ready</div>
                     </div>
                 </div>
+
             </div>
         </div>
     </div>
