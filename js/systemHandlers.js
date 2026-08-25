@@ -214,17 +214,14 @@ function setupSystemHandlers(mainWindow) {
         }
     };
 
-    // Get Node.js version - prefer the portable copy in provider/node
-    ipcMain.handle('get-node-version', async () => {
-        const portableNode = path.join(PROVIDER_DIR, 'node', 'node.exe');
-        const nodeCommand = fs.existsSync(portableNode) ? portableNode : 'node';
-
-        const result = await runExecutable(nodeCommand, ['--version']);
-        if (result.error) {
-            return { error: result.error };
-        }
-        return { version: result.output.trim() };
-    });
+    // Report the Node runtime the app actually runs on: the one embedded in
+    // Electron. The app never shells out to `node`, so probing provider/node or
+    // the system PATH only produced a false 'Not Found' on machines without a
+    // standalone Node install - which then kept the LED Control tab disabled.
+    ipcMain.handle('get-node-version', async () => ({
+        version: `v${process.versions.node}`,
+        bundled: true
+    }));
 
     // Check if app exists
     ipcMain.handle('check-app-exists', async (event, appName) => {

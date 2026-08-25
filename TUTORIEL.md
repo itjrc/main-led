@@ -68,12 +68,14 @@ Au démarrage, l'application affiche 4 indicateurs de statut :
 
 | Composant | Chemin attendu |
 |---|---|
-| Node.js | `provider/node/node.exe` (sinon le `node` du système) |
+| Node.js | Fourni par Electron — rien à installer (affichage informatif) |
 | OBS Studio | `provider/obs/bin/64bit/obs64.exe` |
 | FFmpeg | `provider/ffmpeg/bin/ffmpeg.exe` |
 | FFprobe | `provider/ffmpeg/bin/ffprobe.exe` |
 
-Tant que les 4 ne sont pas verts, l'onglet **LED Control** reste désactivé.
+Tant qu'OBS, FFmpeg et FFprobe ne sont pas verts, l'onglet **LED Control** reste
+désactivé. Node.js n'entre pas dans cette condition : l'application tourne sur le
+Node embarqué dans Electron et n'appelle jamais `node` en ligne de commande.
 
 Cliquez sur **Download** pour OBS puis pour FFmpeg. Le téléchargement puis
 l'extraction affichent chacun leur pourcentage, et l'installation est vérifiée à la

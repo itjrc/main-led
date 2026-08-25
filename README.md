@@ -27,10 +27,14 @@
 ## 📋 System Requirements
 
 ### Required Software
-- **Node.js** - JavaScript runtime environment
 - **OBS Studio** - Video recording and streaming software
 - **FFmpeg** - Media processing toolkit
 - **FFprobe** - Media analysis tool
+
+Node.js is **not** a runtime requirement: the app runs on the Node runtime embedded
+in Electron and never invokes `node` as a command. A standalone Node is only needed
+to build or launch the app from source on Windows, which `start.bat` handles by
+downloading a portable copy into `provider/node/`.
 
 ### Hardware Requirements
 - **Dual Monitor Setup** - For fullscreen projection functionality

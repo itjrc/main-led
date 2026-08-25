@@ -70,24 +70,23 @@ async function showAppVersion() {
     }
 }
 
+// Informational only: Node ships inside Electron, so there is nothing to install
+// and nothing to gate on. See checkAllSystemsReady().
 async function checkNodeVersion() {
+    const versionElement = document.getElementById('node-version');
+    const statusElement = document.getElementById('node-status');
+    const indicatorElement = document.getElementById('node-indicator');
+
     try {
         const result = await window.electronAPI.ipcRenderer.invoke('get-node-version');
-        const versionElement = document.getElementById('node-version');
-        const statusElement = document.getElementById('node-status');
-        const indicatorElement = document.getElementById('node-indicator');
-        
-        if (result.version) {
-            versionElement.textContent = `Version: ${result.version}`;
-            statusElement.textContent = 'Installed';
-            indicatorElement.className = 'status-indicator installed';
-        } else {
-            versionElement.textContent = result.error || 'Not found';
-            statusElement.textContent = 'Not Found';
-            indicatorElement.className = 'status-indicator missing';
-        }
+        versionElement.textContent = `Version: ${result.version} (bundled)`;
+        statusElement.textContent = 'Bundled';
+        indicatorElement.className = 'status-indicator installed';
     } catch (error) {
-        console.error('Error checking Node version:', error);
+        console.error('Error reading Node version:', error);
+        versionElement.textContent = 'Bundled with Electron';
+        statusElement.textContent = 'Bundled';
+        indicatorElement.className = 'status-indicator installed';
     }
 }
 
@@ -181,14 +180,15 @@ async function refreshAll() {
 }
 
 function checkAllSystemsReady() {
-    const nodeIndicator = document.getElementById('node-indicator');
     const obsIndicator = document.getElementById('obs-indicator');
     const ffmpegIndicator = document.getElementById('ffmpeg-indicator');
     const ffprobeIndicator = document.getElementById('ffprobe-indicator');
     const ledControlTab = document.getElementById('led-control-tab');
-    
-    const allReady = nodeIndicator.classList.contains('installed') && 
-                     obsIndicator.classList.contains('installed') && 
+
+    // Node is not part of the gate: it comes with Electron, so it is always
+    // present. Requiring it here left LED Control disabled on any machine
+    // without a standalone Node install.
+    const allReady = obsIndicator.classList.contains('installed') && 
                      ffmpegIndicator.classList.contains('installed') && 
                      ffprobeIndicator.classList.contains('installed');
     
