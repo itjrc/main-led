@@ -9,6 +9,7 @@
 - **Score Display Integration** - Automatically shows scores at configurable intervals
 - **Fullscreen Projection** - Auto-projects to second monitor when OBS launches
 - **Media Conversion** - Converts PNG/JPG images and non-MP4 videos to MP4 format
+- **Partner Logo Sync** - Downloads every partner logo from the tournament site into PARTNERS_LOGO, fetching automatically when the folder is empty
 - **Dynamic Path Management** - Automatically updates OBS scene paths based on project location
 
 ### 🎨 User Interface
@@ -69,6 +70,34 @@ start.bat
 4. **Initialize Scenes** - Click "Initialize" to set up scene items
 5. **Start Automation** - Begin automated LED management
 
+## 🖼️ Partner Logos
+
+The `Partners Logo` slideshow in the OBS collection reads whatever images sit in
+`data/PARTNERS_LOGO/`. The **Partner Logos** panel in LED Control keeps that
+folder in step with the tournament site.
+
+- **Automatic on an empty folder.** The first time the panel opens with nothing
+  in the folder, it fetches all partner logos on its own - no button needed.
+- **Manual sync.** *Sync from itjr.ca* re-reads the partner list at any time and
+  picks up whatever the tournament has added, changed, or dropped.
+- **Source of truth.** The partners page renders client-side, so its HTML holds
+  no logos. The list is read from the site's own partner data instead, which
+  also carries the display order and keeps the dignitary headshots stored in the
+  same asset folder out of the sync.
+- **SVG is rasterized.** An OBS slideshow cannot read SVG, so SVG logos are
+  rendered to 1024px PNG - the same long edge the site's own PNGs use.
+- **Nothing is deleted.** A logo the site drops is moved to a `REMOVED/`
+  subfolder, the way converted media is archived under `ORIGINAL/`. Files you
+  put in the folder yourself are never touched and are reported separately in
+  the panel.
+- **Live reload.** When OBS is connected, the slideshow is re-pointed at the
+  folder after a sync so new logos appear without restarting OBS. With OBS off,
+  the files simply wait on disk for the next launch.
+
+A `.partners-manifest.json` in the folder records which files came from the
+site, so a later sync can tell them from your own additions and skip
+re-downloading anything that has not changed.
+
 ## 📁 Project Structure
 
 ```
@@ -76,6 +105,7 @@ OBS-MAIN-LED/
 ├── 📁 js/                          # Modular JavaScript files
 │   ├── obsManager.js               # OBS WebSocket management
 │   ├── mediaConverter.js           # Video/image conversion
+│   ├── partnerLogos.js             # Partner logo download and sync
 │   ├── obsLauncher.js              # OBS launch process
 │   ├── ipcHandlers.js              # IPC communication handlers
 │   └── systemHandlers.js           # System setup handlers
@@ -86,7 +116,7 @@ OBS-MAIN-LED/
 ├── 📁 data/                        # Configuration and media
 │   ├── obs-scene-collection.json   # OBS scene configuration
 │   ├── 📁 PARTNERS_VIDEOS/         # Video files for rotation
-│   └── 📁 PARTNERS_LOGO/           # Logo slideshow images
+│   └── 📁 PARTNERS_LOGO/           # Logo slideshow images, synced from itjr.ca
 ├── 📁 provider/                    # Third-party software
 │   ├── 📁 obs/                     # OBS Studio installation
 │   └── 📁 ffmpeg/                  # FFmpeg tools

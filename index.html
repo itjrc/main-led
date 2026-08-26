@@ -486,15 +486,21 @@
             gap: 0.5rem;
         }
 
-        /* Row 2: scenes | automation | plan. Row 3: media (wide) | log. */
+        /* Row 2: scenes | automation | plan. Rows 3-4: media then logos on the
+           left, with the log running the full height of both on the right. */
         .led-grid .led-log {
             grid-column: 3;
-            grid-row: 3;
+            grid-row: 3 / span 2;
         }
 
         .led-grid .led-media {
             grid-column: 1 / span 2;
             grid-row: 3;
+        }
+
+        .led-grid .led-logos {
+            grid-column: 1 / span 2;
+            grid-row: 4;
         }
 
         /* Folder picker row */
@@ -755,12 +761,14 @@
 
             .led-grid .led-log,
             .led-grid .led-media,
+            .led-grid .led-logos,
             .led-grid .led-plan {
                 grid-column: auto;
                 grid-row: auto;
             }
 
-            .led-grid .led-media {
+            .led-grid .led-media,
+            .led-grid .led-logos {
                 grid-column: 1 / -1;
             }
         }
@@ -772,6 +780,7 @@
 
             .led-grid .led-log,
             .led-grid .led-media,
+            .led-grid .led-logos,
             .led-grid .led-plan {
                 grid-column: auto;
                 grid-row: auto;
@@ -1051,6 +1060,53 @@
 
                     <div class="panel-actions">
                         <button class="btn btn-primary" id="sync-library-btn" onclick="window.obsManager.syncMediaLibrary()" title="OBS connected: updates the live LOOP_IND scene. OBS off: updates the collection file for the next launch.">Convert &amp; Sync LOOP_IND</button>
+                    </div>
+                </div>
+
+                <!-- Partner logos: filled from the tournament site -->
+                <div class="section led-logos">
+                    <h2>
+                        <span>🖼️</span> Partner Logos
+                        <button class="btn btn-outline btn-sm refresh-btn" onclick="window.obsManager.refreshLogoStats()">Refresh</button>
+                    </h2>
+
+                    <div class="folder-row">
+                        <input type="text" id="logo-path" value="data/PARTNERS_LOGO/" placeholder="Folder holding the partner logos">
+                        <button class="btn btn-secondary" onclick="window.obsManager.selectLogoDirectory()">Browse…</button>
+                        <button class="btn btn-ghost btn-icon" onclick="window.obsManager.openLogoDirectory()" title="Open in Explorer">📂</button>
+                    </div>
+
+                    <div id="logo-stats" class="library-stats">
+                        <div class="library-empty">Reading folder…</div>
+                    </div>
+
+                    <div id="logo-progress" class="library-progress" hidden>
+                        <div class="library-progress-head">
+                            <span class="spinner spinner-sm"></span>
+                            <span id="logo-progress-label">Fetching logos…</span>
+                        </div>
+                        <div class="library-progress-track">
+                            <div class="library-progress-bar" id="logo-progress-bar"></div>
+                        </div>
+                    </div>
+
+                    <div class="library-options">
+                        <div class="option-note">
+                            <strong>Fetched from the tournament site</strong>
+                            <small>
+                                Logos come from <code>itjr.ca/fr/tournoi/partenaires</code> and land in the
+                                folder the <code>Partners Logo</code> slideshow reads. An empty folder is
+                                filled automatically the first time this panel opens; after that, Sync picks
+                                up whatever the tournament has changed. SVG logos are rasterized to 1024px
+                                PNG, since an OBS slideshow cannot read SVG. A logo the site drops is moved
+                                into a <code>REMOVED</code> subfolder rather than deleted, and any file you
+                                added by hand is left alone.
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="panel-actions">
+                        <button class="btn btn-primary" id="sync-logos-btn" onclick="window.obsManager.syncPartnerLogos()" title="Re-download the partner logos from itjr.ca and reload the slideshow in OBS">Sync from itjr.ca</button>
                     </div>
                 </div>
 

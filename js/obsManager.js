@@ -456,6 +456,60 @@ async function syncLoopScene(directory) {
     }
 }
 
+// Point the partner logo slideshow at the folder and make OBS re-read it.
+// A slideshow configured with a directory only scans it when its settings are
+// applied, so freshly downloaded logos stay invisible until the settings are
+// written back - which is what this does, even when the path is unchanged.
+async function refreshPartnersLogoSlideshow(directory) {
+    try {
+        if (!obs || !obs.identified) {
+            return { success: false, error: 'Not connected to OBS' };
+        }
+
+        const folder = path.resolve(directory).replace(/\\/g, '/');
+
+        const { inputs } = await obs.call('GetInputList');
+        const slideshows = inputs.filter(input =>
+            input.inputKind === 'slideshow' || input.unversionedInputKind === 'slideshow');
+
+        if (!slideshows.length) {
+            return { success: false, error: 'No slideshow source found in the collection' };
+        }
+
+        // Prefer the source that already points at this folder, then the one
+        // shipped in the collection, so a renamed source still gets found.
+        let target = null;
+        for (const input of slideshows) {
+            try {
+                const { inputSettings } = await obs.call('GetInputSettings', { inputName: input.inputName });
+                const files = inputSettings.files || [];
+                if (files.some(f => String(f.value || '').replace(/\\/g, '/').toLowerCase() === folder.toLowerCase())) {
+                    target = input.inputName;
+                    break;
+                }
+            } catch (error) {
+                // Not readable: fall through to the name match
+            }
+        }
+
+        if (!target) {
+            const byName = slideshows.find(i => /partners?\s*logos?/i.test(i.inputName));
+            target = (byName || slideshows[0]).inputName;
+        }
+
+        await obs.call('SetInputSettings', {
+            inputName: target,
+            inputSettings: { files: [{ value: folder, selected: false, hidden: false }] },
+            overlay: true
+        });
+
+        console.log(`Partner logo slideshow "${target}" reloaded from ${folder}`);
+        return { success: true, inputName: target, directory: folder };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
 // onComplete, when provided, runs once the sequence has handed the program
 // back to LOOP_IND - the automation uses it to resume the paused video loop.
 async function showScores(data, mainWindow, onComplete) {
@@ -888,6 +942,7 @@ module.exports = {
     startAutomation,
     stopAutomation,
     syncLoopScene,
+    refreshPartnersLogoSlideshow,
     cleanupOBS,
     updateSceneCollectionPaths,
     enableFullscreenProjection,

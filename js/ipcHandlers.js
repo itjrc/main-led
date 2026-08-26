@@ -6,10 +6,15 @@ const { launchOBS } = require('./obsLauncher');
 const { setupSystemHandlers } = require('./systemHandlers');
 const { processMediaFiles } = require('./mediaConverter');
 const videoLibrary = require('./videoLibrary');
+const partnerLogos = require('./partnerLogos');
 
 // Guards the watcher pipeline: a burst of file events must not start several
 // conversion + sync passes at once.
 let mediaSyncInProgress = false;
+
+// The logo sync is re-entrant from two directions - the manual button and the
+// auto-fetch that fires on an empty folder - so it is guarded the same way.
+let logoSyncInProgress = false;
 
 // Convert anything that is not MP4 yet, then mirror the folder into LOOP_IND.
 async function runMediaSync(directory, mainWindow, reason) {
@@ -92,6 +97,58 @@ async function runMediaSync(directory, mainWindow, reason) {
         return { success: false, error: error.message };
     } finally {
         mediaSyncInProgress = false;
+    }
+}
+
+// Download the partner logos from itjr.ca into PARTNERS_LOGO, then make OBS
+// re-read the slideshow so the new files are on the board without a restart.
+async function runLogoSync(directory, mainWindow, reason) {
+    if (logoSyncInProgress) {
+        return { success: false, error: 'A logo sync is already running' };
+    }
+
+    logoSyncInProgress = true;
+
+    const notify = (type, message) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('obs-event', { type, message });
+        }
+    };
+
+    try {
+        notify('logo-sync-progress', `Partner logo sync started (${reason})`);
+
+        const result = await partnerLogos.syncLogos(directory, {
+            onProgress: (message) => notify('logo-sync-progress', message)
+        });
+
+        const { downloaded, updated, unchanged, removed, failed } = result;
+        notify('logo-sync-progress',
+            `Logos: ${downloaded.length} new, ${updated.length} updated, `
+            + `${unchanged.length} unchanged, ${removed.length} archived`);
+
+        failed.forEach(f => notify('logo-sync-error', `${f.name}: ${f.error}`));
+
+        // Only a folder that actually changed is worth reloading in OBS
+        if (downloaded.length || updated.length || removed.length) {
+            const refresh = await obsManager.refreshPartnersLogoSlideshow(result.directory);
+            if (refresh.success) {
+                notify('logo-sync-progress', `Slideshow "${refresh.inputName}" reloaded`);
+            } else if (!/not connected/i.test(refresh.error || '')) {
+                notify('logo-sync-error', `Could not reload the slideshow: ${refresh.error}`);
+            }
+        }
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('obs-event', { type: 'logo-library-changed', directory: result.directory });
+        }
+
+        return result;
+    } catch (error) {
+        notify('logo-sync-error', `Logo sync failed: ${error.message}`);
+        return { success: false, error: error.message };
+    } finally {
+        logoSyncInProgress = false;
     }
 }
 
@@ -196,6 +253,47 @@ function setupIpcHandlers(mainWindow) {
         });
 
         return { ...result, watching: result.success };
+    });
+
+    // --- Partner logos ---------------------------------------------------
+
+    ipcMain.handle('get-logo-stats', async (event, directory) => {
+        try {
+            return { success: true, stats: partnerLogos.getLogoStats(directory) };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('sync-partner-logos', async (event, directory, reason) => {
+        return await runLogoSync(directory, mainWindow, reason || 'manual');
+    });
+
+    ipcMain.handle('open-logo-directory', async (event, directory) => {
+        try {
+            const resolved = partnerLogos.resolveDirectory(directory);
+            fs.mkdirSync(resolved, { recursive: true });
+            await shell.openPath(resolved);
+            return { success: true, directory: resolved };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('select-logo-directory', async (event, currentDirectory) => {
+        if (!mainWindow) return { canceled: true };
+
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'Select the partner logos folder',
+            defaultPath: partnerLogos.resolveDirectory(currentDirectory),
+            properties: ['openDirectory', 'createDirectory']
+        });
+
+        if (result.canceled || !result.filePaths.length) {
+            return { canceled: true };
+        }
+
+        return { canceled: false, directory: result.filePaths[0] };
     });
 
     // Show WebSocket setup dialog

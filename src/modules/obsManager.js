@@ -9,6 +9,10 @@ class OBSManager {
         this.logContainer = null;
         this.isWatching = false;
         this.isConverting = false;
+        this.isSyncingLogos = false;
+        // The empty-folder fetch runs once per session: a sync that genuinely
+        // finds nothing must not re-trigger itself on every stats refresh.
+        this.hasAutoFetchedLogos = false;
         this.init();
     }
 
@@ -18,6 +22,7 @@ class OBSManager {
         this.setupEventListeners();
         this.addLog('OBS Manager initialized', 'info');
         this.refreshLibraryStats();
+        this.refreshLogoStats();
     }
 
     setupEventListeners() {
@@ -49,6 +54,16 @@ class OBSManager {
                 break;
             case 'media-sync-error':
                 this.addLog(data.message, 'error');
+                break;
+            case 'logo-sync-progress':
+                this.addLog(data.message, 'info');
+                this.updateLogoProgress(data.message);
+                break;
+            case 'logo-sync-error':
+                this.addLog(data.message, 'error');
+                break;
+            case 'logo-library-changed':
+                this.refreshLogoStats();
                 break;
             case 'media-library-changed':
                 // Scene items were added or removed, so the cached ids are stale
@@ -514,6 +529,204 @@ class OBSManager {
     toggleWatchdog() {
         const checkbox = document.getElementById('watch-folder');
         this.setWatchdog(Boolean(checkbox && checkbox.checked));
+    }
+
+    // --- Partner logos ----------------------------------------------------
+
+    getLogoDirectory() {
+        return document.getElementById('logo-path')?.value || 'data/PARTNERS_LOGO/';
+    }
+
+    async selectLogoDirectory() {
+        try {
+            const result = await window.electronAPI.ipcRenderer.invoke(
+                'select-logo-directory', this.getLogoDirectory());
+
+            if (result.canceled) return;
+
+            document.getElementById('logo-path').value = result.directory;
+            this.addLog(`Logo folder set to ${result.directory}`, 'success');
+
+            // A new folder gets the same empty-folder treatment as the first one
+            this.hasAutoFetchedLogos = false;
+            await this.refreshLogoStats();
+        } catch (error) {
+            this.addLog(`Could not select folder: ${error.message}`, 'error');
+        }
+    }
+
+    async openLogoDirectory() {
+        await window.electronAPI.ipcRenderer.invoke('open-logo-directory', this.getLogoDirectory());
+    }
+
+    async refreshLogoStats() {
+        const container = document.getElementById('logo-stats');
+        if (!container) return;
+
+        container.classList.add('is-loading');
+
+        try {
+            const result = await window.electronAPI.ipcRenderer.invoke(
+                'get-logo-stats', this.getLogoDirectory());
+
+            if (!result.success) {
+                container.innerHTML = `<div class="library-empty">Error: ${result.error}</div>`;
+                return;
+            }
+
+            this.renderLogoStats(result.stats);
+
+            // An empty folder means the board would show nothing, so the logos
+            // are fetched without waiting to be asked.
+            const empty = !result.stats.exists || result.stats.count === 0;
+            if (empty && !this.hasAutoFetchedLogos && !this.isSyncingLogos) {
+                this.hasAutoFetchedLogos = true;
+                await this.syncPartnerLogos('auto: folder empty');
+            }
+        } catch (error) {
+            container.innerHTML = `<div class="library-empty">Error: ${error.message}</div>`;
+        } finally {
+            container.classList.remove('is-loading');
+        }
+    }
+
+    renderLogoStats(stats) {
+        const container = document.getElementById('logo-stats');
+        if (!container) return;
+
+        if (!stats.exists) {
+            container.innerHTML = `
+                <div class="library-empty">
+                    Folder not found:<br><code>${stats.directory}</code>
+                </div>`;
+            return;
+        }
+
+        if (!stats.count) {
+            container.innerHTML = `
+                <div class="library-empty">
+                    No logo in <code>${stats.directory}</code> yet
+                </div>`;
+            return;
+        }
+
+        // A full timestamp wraps onto two lines and makes this metric taller
+        // than the three beside it, so today's syncs show only the clock.
+        const syncedLabel = this.formatSyncTime(stats.syncedAt);
+
+        // Files the user dropped in are reported so it is clear why the count
+        // does not match the site, and that the sync will not remove them.
+        const localRow = stats.local
+            ? `<div class="library-note">${stats.local} file(s) not from the site, kept as is</div>`
+            : '';
+
+        container.innerHTML = `
+            <div class="library-metrics">
+                <div class="metric">
+                    <span class="metric-value">${stats.count}</span>
+                    <span class="metric-label">logos in folder</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">${stats.fromSite}</span>
+                    <span class="metric-label">from itjr.ca</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">${stats.totalBytesLabel}</span>
+                    <span class="metric-label">on disk</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-value">${syncedLabel}</span>
+                    <span class="metric-label">last sync</span>
+                </div>
+            </div>
+            ${localRow}
+        `;
+    }
+
+    formatSyncTime(iso) {
+        if (!iso) return 'never';
+
+        const when = new Date(iso);
+        if (Number.isNaN(when.getTime())) return 'never';
+
+        const today = new Date();
+        const sameDay = when.getFullYear() === today.getFullYear()
+            && when.getMonth() === today.getMonth()
+            && when.getDate() === today.getDate();
+
+        return sameDay
+            ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : when.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+
+    showLogoProgress(label) {
+        const panel = document.getElementById('logo-progress');
+        const text = document.getElementById('logo-progress-label');
+        const bar = document.getElementById('logo-progress-bar');
+
+        if (text) text.textContent = label;
+        if (bar) bar.style.width = '0%';
+        if (panel) panel.hidden = false;
+    }
+
+    updateLogoProgress(message) {
+        const panel = document.getElementById('logo-progress');
+        if (!panel || panel.hidden) return;
+
+        const text = document.getElementById('logo-progress-label');
+        const bar = document.getElementById('logo-progress-bar');
+
+        if (text) text.textContent = message;
+
+        // partnerLogos reports "Fetching logos (12/43)..."
+        const match = /\((\d+)\s*\/\s*(\d+)\)/.exec(message);
+        if (bar && match) {
+            const [, done, total] = match;
+            bar.style.width = `${Math.round((Number(done) / Number(total)) * 100)}%`;
+        }
+    }
+
+    hideLogoProgress() {
+        const panel = document.getElementById('logo-progress');
+        if (panel) panel.hidden = true;
+    }
+
+    // Downloads the partner logos and, when OBS is connected, makes the
+    // slideshow re-read the folder. Works with OBS off too: the files land on
+    // disk and the slideshow picks them up at the next launch.
+    async syncPartnerLogos(reason = 'manual') {
+        if (this.isSyncingLogos) return;
+
+        const button = document.getElementById('sync-logos-btn');
+        this.isSyncingLogos = true;
+        // Any attempt counts as the one this session owes an empty folder, so a
+        // sync that fails is not immediately retried by its own stats refresh.
+        this.hasAutoFetchedLogos = true;
+        if (button) button.disabled = true;
+        this.showLogoProgress('Reading the partner list from itjr.ca…');
+
+        try {
+            this.addLog(`Fetching partner logos (${reason})...`, 'info');
+            const result = await window.electronAPI.ipcRenderer.invoke(
+                'sync-partner-logos', this.getLogoDirectory(), reason);
+
+            if (result.success) {
+                this.addLog(
+                    `Logos ready: ${result.downloaded.length} new, ${result.updated.length} updated, `
+                    + `${result.unchanged.length} unchanged, ${result.removed.length} archived`,
+                    'success');
+                (result.failed || []).forEach(f => this.addLog(`Could not fetch ${f.name}: ${f.error}`, 'warning'));
+            } else {
+                this.addLog(`Logo sync failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.addLog(`Logo sync error: ${error.message}`, 'error');
+        } finally {
+            this.isSyncingLogos = false;
+            if (button) button.disabled = false;
+            this.hideLogoProgress();
+            await this.refreshLogoStats();
+        }
     }
 
     updateConnectionStatus(status, message) {
