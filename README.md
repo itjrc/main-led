@@ -44,8 +44,6 @@ downloading a portable copy into `provider/node/`.
 
 ## 🚀 Quick Start
 
-> 📖 Guide d'installation détaillé en français : [TUTORIEL.md](TUTORIEL.md)
-
 ### 1. Initial Setup
 ```bash
 # Clone or download the project

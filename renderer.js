@@ -1,6 +1,9 @@
 // Global variables
 let downloadInProgress = {};
 let obsManager = null;
+// The tab auto-switches to LED Control once per session when every dependency
+// is installed; afterwards the user's tab choice is left alone.
+let autoSwitchedToLedControl = false;
 
 // Check if electronAPI is available (it should be exposed by preload.js)
 if (!window.electronAPI) {
@@ -143,11 +146,14 @@ async function downloadApp(appName) {
         
         if (result.success) {
             progressElement.innerHTML = '<div class="progress-message">✅ Download completed successfully!</div>';
-            setTimeout(() => {
+            setTimeout(async () => {
                 progressElement.style.display = 'none';
-                checkAppStatus(appName);
+                // Await the status refreshes: checkAllSystemsReady reads the
+                // indicators they update, and deciding on stale ones would
+                // keep LED Control locked after the last install.
+                await checkAppStatus(appName);
                 if (appName === 'ffmpeg') {
-                    checkAppStatus('ffprobe');
+                    await checkAppStatus('ffprobe');
                 }
                 checkAllSystemsReady();
             }, 2000);
@@ -196,6 +202,13 @@ function checkAllSystemsReady() {
         ledControlTab.disabled = false;
         ledControlTab.style.opacity = '1';
         ledControlTab.style.cursor = 'pointer';
+
+        // Everything is installed: go straight to the control board instead of
+        // leaving the user on a Setup tab with nothing left to set up.
+        if (!autoSwitchedToLedControl) {
+            autoSwitchedToLedControl = true;
+            switchTab('led-control');
+        }
     } else {
         ledControlTab.disabled = true;
         ledControlTab.style.opacity = '0.5';

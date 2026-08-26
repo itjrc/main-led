@@ -1,6 +1,7 @@
 const { ipcMain, dialog, shell } = require('electron');
 const fs = require('fs');
 const obsManager = require('./obsManager');
+const { installSceneCollection } = require('./obsConfig');
 const { launchOBS } = require('./obsLauncher');
 const { setupSystemHandlers } = require('./systemHandlers');
 const { processMediaFiles } = require('./mediaConverter');
@@ -29,6 +30,9 @@ async function runMediaSync(directory, mainWindow, reason) {
         notify('media-sync-progress', `Media sync started (${reason})`);
 
         const conversion = await processMediaFiles(resolved, mainWindow);
+        if ((conversion.renamed || []).length) {
+            notify('media-sync-progress', `Cleaned ${conversion.renamed.length} file name(s)`);
+        }
         const converted = (conversion.results || []).filter(r => r.success);
         if (converted.length) {
             notify('media-sync-progress', `Converted ${converted.length} file(s) to MP4`);
@@ -37,16 +41,35 @@ async function runMediaSync(directory, mainWindow, reason) {
         const sync = await obsManager.syncLoopScene(resolved);
 
         if (!sync.success && /not connected/i.test(sync.error || '')) {
-            // Converting without OBS running is a normal case (folder load), so
-            // the caller must not see it as a failure.
-            notify('media-sync-progress', 'OBS not connected, LOOP_IND sync skipped');
+            // OBS is not connected: sync the collection file on disk instead,
+            // so the next OBS launch already mirrors the folder.
+            const offline = installSceneCollection(resolved);
+
+            if (!offline.success) {
+                notify('media-sync-error', `Offline collection sync failed: ${offline.error}`);
+                return { success: false, error: offline.error };
+            }
+
+            notify('media-sync-progress',
+                offline.added.length || offline.removed.length
+                    ? `OBS offline: collection file updated (${offline.added.length} added, `
+                        + `${offline.removed.length} removed), loads at next OBS launch`
+                    : 'OBS offline: collection file already in sync with the folder');
 
             // The folder still changed, so the stats panel must refresh
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('obs-event', { type: 'media-library-changed', directory: resolved });
             }
 
-            return { success: true, syncSkipped: true, added: [], removed: [], kept: 0, converted: converted.length };
+            return {
+                success: true,
+                offline: true,
+                added: offline.added,
+                removed: offline.removed,
+                kept: offline.kept,
+                failed: [],
+                converted: converted.length
+            };
         }
 
         if (!sync.success) {

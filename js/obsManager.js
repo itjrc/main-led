@@ -2,12 +2,29 @@ const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const OBSWebSocket = require('obs-websocket-js').default;
-const { scanDirectory } = require('./videoLibrary');
+const { scanDirectory, getLibraryStats } = require('./videoLibrary');
 const { clearSafeModeSentinel } = require('./obsConfig');
 
 let obs = null;
 let automationInterval = null;
 let obsProcess = null;
+
+// The LED board canvas. Every transform in the shipped collection assumes this
+// exact size, so the OBS canvas must match it (see ensureCanvasResolution).
+const CANVAS_WIDTH = 1920;
+const CANVAS_HEIGHT = 1080;
+
+// OBS "Adapter à l'écran" (fit to screen): scale-inner bounds covering the
+// whole canvas, anchored top-left.
+const FIT_TO_CANVAS_TRANSFORM = {
+    positionX: 0,
+    positionY: 0,
+    alignment: 5,
+    boundsType: 'OBS_BOUNDS_SCALE_INNER',
+    boundsAlignment: 0,
+    boundsWidth: CANVAS_WIDTH,
+    boundsHeight: CANVAS_HEIGHT
+};
 
 // Timers scheduled by the score sequence. Tracked so stopAutomation() can cancel
 // them; clearInterval alone left them firing and kept switching scenes.
@@ -133,6 +150,32 @@ async function waitUntilReady(attempts = 20, delayMs = 750) {
     return false;
 }
 
+// OBS defaults a fresh profile's canvas to the monitor's resolution, while
+// every transform in the collection assumes 1920x1080. Enforced on every
+// connection so a manually launched OBS complies too.
+async function ensureCanvasResolution() {
+    try {
+        const video = await obs.call('GetVideoSettings');
+        if (video.baseWidth === CANVAS_WIDTH && video.baseHeight === CANVAS_HEIGHT
+            && video.outputWidth === CANVAS_WIDTH && video.outputHeight === CANVAS_HEIGHT) {
+            return;
+        }
+
+        await obs.call('SetVideoSettings', {
+            baseWidth: CANVAS_WIDTH,
+            baseHeight: CANVAS_HEIGHT,
+            outputWidth: CANVAS_WIDTH,
+            outputHeight: CANVAS_HEIGHT
+        });
+        console.log(`OBS canvas set to ${CANVAS_WIDTH}x${CANVAS_HEIGHT} `
+            + `(was ${video.baseWidth}x${video.baseHeight}, output ${video.outputWidth}x${video.outputHeight})`);
+    } catch (error) {
+        // Refused while an output (stream/record) is active; the profile's
+        // basic.ini written at launch still carries the right size.
+        console.log(`Could not set the OBS canvas to ${CANVAS_WIDTH}x${CANVAS_HEIGHT}: ${error.message}`);
+    }
+}
+
 // OBS connection functions
 async function connectToOBS(address, password, mainWindow) {
     try {
@@ -162,9 +205,21 @@ async function connectToOBS(address, password, mainWindow) {
         // Do not issue requests until OBS has finished loading
         await waitUntilReady();
 
+        // The board is 1920x1080; fix the canvas before anything renders on it
+        await ensureCanvasResolution();
+
+        // Studio Mode is not used. Disabling it actively matters: OBS persists
+        // the toggle across runs, so an instance that still carries it from an
+        // older version (or a manual toggle) would otherwise keep it forever.
+        try {
+            await obs.call('SetStudioModeEnabled', { studioModeEnabled: false });
+        } catch (error) {
+            console.log(`Could not disable Studio Mode: ${error.message}`);
+        }
+
         // Automatically enable fullscreen projection on second monitor after connection
         await enableFullscreenProjection();
-        
+
         return { success: true };
     } catch (error) {
         return { success: false, error: error.message };
@@ -206,22 +261,60 @@ async function setOBSScene(sceneName) {
     }
 }
 
+// Fisher-Yates, in place
+function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+// Split clips into batches of at most `size`, keeping the total duration of
+// each batch as even as possible: clips longest-first, each into the batch
+// with the smallest running total that still has a free slot (LPT greedy).
+// Clips play in full, so without this, "5 videos then scores" could mean a
+// 40-second block one time and a two-minute block the next.
+function buildBalancedBatches(clips, size) {
+    const batchCount = Math.max(1, Math.ceil(clips.length / size));
+    const batches = Array.from({ length: batchCount }, () => ({ items: [], total: 0 }));
+
+    const sorted = clips.slice().sort((a, b) => b.duration - a.duration);
+    for (const clip of sorted) {
+        let target = null;
+        for (const batch of batches) {
+            if (batch.items.length >= size) continue;
+            if (!target || batch.total < target.total) target = batch;
+        }
+        target.items.push(clip);
+        target.total += clip.duration;
+    }
+    return batches;
+}
+
 async function initializeOBSScenes() {
     try {
         const scoresItems = {};
         const loopItems = {};
-        
-        // Get SCORES scene items
+
+        // Only the score WEBPAGES rotate: the live-scoring displays are
+        // browser_source inputs. Everything else in the SCORES scene - the
+        // rain-delay text banners the operator toggles by hand, overlays -
+        // keeps whatever visibility was set manually. (Filtering on the source
+        // name does not work: the displays are named SINGLE-MEN, DOUBLE-WOMAN,
+        // ... with no common marker.)
         const scoresScene = await obs.call('GetSceneItemList', { sceneName: 'SCORES' });
         scoresScene.sceneItems.forEach(item => {
-            if (item.sourceName && item.sourceName.includes('SCORE')) {
+            if (item.inputKind === 'browser_source') {
                 scoresItems[item.sourceName] = item.sceneItemId;
             }
         });
-        
-        // Get LOOP_IND scene items
+
+        // Get LOOP_IND scene items, in a fresh random rotation order. This map
+        // is rebuilt at connection, after every folder change (manual sync or
+        // watchdog) and on Initialize, so the shuffle re-rolls at those points.
         const loopScene = await obs.call('GetSceneItemList', { sceneName: 'LOOP_IND' });
-        loopScene.sceneItems.forEach(item => {
+        shuffle(loopScene.sceneItems.slice()).forEach(item => {
             loopItems[item.sourceName] = item.sceneItemId;
         });
         
@@ -304,6 +397,22 @@ async function syncLoopScene(directory) {
             }
         }
 
+        // "Adapter à l'écran" for every clip that stays, not only the new
+        // ones: an item moved or resized by hand in OBS drifts off the LED
+        // canvas and would otherwise keep its broken transform forever.
+        for (const [filePath, item] of itemsByFile) {
+            if (!onDisk.has(filePath)) continue;
+            try {
+                await obs.call('SetSceneItemTransform', {
+                    sceneName: 'LOOP_IND',
+                    sceneItemId: item.sceneItemId,
+                    sceneItemTransform: FIT_TO_CANVAS_TRANSFORM
+                });
+            } catch (error) {
+                console.log(`Could not fit ${item.sourceName} to the canvas: ${error.message}`);
+            }
+        }
+
         // Add the files that have no source yet
         const added = [];
         const failed = [];
@@ -324,19 +433,11 @@ async function syncLoopScene(directory) {
                     sceneItemEnabled: false
                 });
 
-                // Fit to the 1920x1080 canvas like the shipped items do
+                // Fit to the canvas like the shipped items do
                 await obs.call('SetSceneItemTransform', {
                     sceneName: 'LOOP_IND',
                     sceneItemId: created.sceneItemId,
-                    sceneItemTransform: {
-                        positionX: 0,
-                        positionY: 0,
-                        alignment: 5,
-                        boundsType: 'OBS_BOUNDS_SCALE_INNER',
-                        boundsAlignment: 0,
-                        boundsWidth: 1920,
-                        boundsHeight: 1080
-                    }
+                    sceneItemTransform: FIT_TO_CANVAS_TRANSFORM
                 });
 
                 added.push(file.name);
@@ -355,10 +456,26 @@ async function syncLoopScene(directory) {
     }
 }
 
-async function showScores(data, mainWindow) {
+// onComplete, when provided, runs once the sequence has handed the program
+// back to LOOP_IND - the automation uses it to resume the paused video loop.
+async function showScores(data, mainWindow, onComplete) {
     try {
         const { scoresItems, interval } = data;
-        
+
+        // Nothing to rotate: stay on the current scene. Without this guard the
+        // "return to LOOP_IND" step fires at interval * 0 = immediately, which
+        // looks like the scores being skipped.
+        if (!scoresItems || !Object.keys(scoresItems).length) {
+            console.log('No score displays found in the SCORES scene, skipping');
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('obs-event', {
+                    type: 'automation-error',
+                    message: 'No score displays found in the SCORES scene'
+                });
+            }
+            return { success: false, error: 'No score displays found in the SCORES scene' };
+        }
+
         // Go to SCORES scene
         await obs.call('SetCurrentProgramScene', { sceneName: 'SCORES' });
         
@@ -428,6 +545,9 @@ async function showScores(data, mainWindow) {
                     });
                 }
             }
+            if (onComplete) {
+                onComplete();
+            }
         }, interval * idx);
 
         return { success: true };
@@ -438,74 +558,123 @@ async function showScores(data, mainWindow) {
 
 async function startAutomation(data, mainWindow) {
     try {
-        const { scoresItems, loopItems, config } = data;
-        
+        const { scoresItems, loopItems, config, videoPath } = data;
+
         if (automationInterval) {
             clearInterval(automationInterval);
+            automationInterval = null;
         }
         clearPendingTimeouts();
 
-        const videoDuration = config.videoDuration > 0 ? config.videoDuration : 15000;
-
-        let currentVideoIndex = 0;
+        // Fallback for clips whose real length cannot be read (ffprobe absent
+        // or unreadable file) - clips otherwise play their full duration.
+        const fallbackDuration = config.videoDuration > 0 ? config.videoDuration : 15000;
+        const adsCount = config.adsCount > 0 ? config.adsCount : 5;
+        const scoreCount = Object.keys(scoresItems || {}).length;
         const videoItems = Object.entries(loopItems);
-        
+
         if (videoItems.length === 0) {
             throw new Error('No video items found in LOOP_IND scene');
         }
 
+        // Real clip lengths, so the rotation advances when a clip ends instead
+        // of cutting it on a fixed timer.
+        const durationsByName = new Map();
+        try {
+            const stats = await getLibraryStats(videoPath, { probe: true });
+            (stats.files || []).forEach(file => {
+                if (Number.isFinite(file.duration)) {
+                    durationsByName.set(file.name, Math.max(1000, Math.round(file.duration * 1000)));
+                }
+            });
+        } catch (error) {
+            console.log(`Could not probe clip durations: ${error.message}`);
+        }
+
+        const clips = videoItems.map(([name, id]) => ({
+            name,
+            id,
+            duration: durationsByName.get(name) || fallbackDuration,
+            probed: durationsByName.has(name)
+        }));
+
+        // Batches of adsCount clips, balanced so every batch runs close to the
+        // same total time, in a fresh random order at every start.
+        const batches = buildBalancedBatches(clips, adsCount);
+        batches.forEach(batch => shuffle(batch.items));
+        shuffle(batches);
+
+        // Show the plan in the UI: which clips play together, for how long,
+        // and where the score blocks land.
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('obs-event', {
+                type: 'automation-plan',
+                batches: batches.map(batch => ({
+                    total: batch.items.reduce((sum, clip) => sum + clip.duration, 0),
+                    items: batch.items.map(clip => ({
+                        name: clip.name,
+                        duration: clip.duration,
+                        probed: clip.probed
+                    }))
+                })),
+                scoresBetween: Boolean(config.showScores && scoreCount)
+            });
+        }
+
         // Go to LOOP_IND scene
         await obs.call('SetCurrentProgramScene', { sceneName: 'LOOP_IND' });
-        
+
         // Disable all items initially
-        for (const [name, id] of videoItems) {
+        for (const clip of clips) {
             await obs.call('SetSceneItemEnabled', {
                 sceneName: 'LOOP_IND',
-                sceneItemId: id,
+                sceneItemId: clip.id,
                 sceneItemEnabled: false
             });
         }
-        
-        // Start the automation loop
-        automationInterval = setInterval(async () => {
+
+        let batchIndex = 0;
+        let posInBatch = 0;
+        let lastShownId = null;
+
+        // Chained timeouts instead of a fixed interval: each clip schedules
+        // the next switch at its own real duration, so clips play in full.
+        // Everything goes through scheduleTimeout, so Stop cancels it all.
+        const playCurrent = async () => {
+            const clip = batches[batchIndex].items[posInBatch];
             try {
-                // Disable current video
-                if (currentVideoIndex > 0 || videoItems.length > 1) {
-                    const prevIndex = currentVideoIndex === 0 ? videoItems.length - 1 : currentVideoIndex - 1;
+                // Hide the previous clip; when it is the same clip (single
+                // video), the off/on cycle restarts it from the beginning.
+                if (lastShownId !== null) {
                     await obs.call('SetSceneItemEnabled', {
                         sceneName: 'LOOP_IND',
-                        sceneItemId: videoItems[prevIndex][1],
+                        sceneItemId: lastShownId,
                         sceneItemEnabled: false
                     });
                 }
-                
-                // Enable current video
+
                 await obs.call('SetSceneItemEnabled', {
                     sceneName: 'LOOP_IND',
-                    sceneItemId: videoItems[currentVideoIndex][1],
+                    sceneItemId: clip.id,
                     sceneItemEnabled: true
                 });
-                
+                lastShownId = clip.id;
+
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('obs-event', {
                         type: 'automation-progress',
-                        message: `Playing video: ${videoItems[currentVideoIndex][0]}`
+                        message: `Playing video: ${clip.name} `
+                            + `(${(clip.duration / 1000).toFixed(1)} s, batch ${batchIndex + 1}/${batches.length})`
+                    });
+                    // Moves the 🔴 marker in the plan panel
+                    mainWindow.webContents.send('obs-event', {
+                        type: 'automation-now-playing',
+                        kind: 'clip',
+                        batchIndex,
+                        posInBatch,
+                        name: clip.name
                     });
                 }
-                
-                currentVideoIndex = (currentVideoIndex + 1) % videoItems.length;
-                
-                // Show scores every adsCount videos
-                if (config.showScores && currentVideoIndex % config.adsCount === 0) {
-                    scheduleTimeout(async () => {
-                        try {
-                            await showScores({ scoresItems, interval: config.scoreInterval }, mainWindow);
-                        } catch (error) {
-                            console.log(`Error showing scores: ${error.message}`);
-                        }
-                    }, config.transitionTime);
-                }
-                
             } catch (error) {
                 console.log(`Error in automation loop: ${error.message}`);
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -515,9 +684,58 @@ async function startAutomation(data, mainWindow) {
                     });
                 }
             }
-        }, videoDuration);
 
-        console.log(`Automation started: ${videoDuration}ms per video, scores ${config.showScores ? `every ${config.adsCount} videos` : 'disabled'}`);
+            // Full clip length, then move on - scheduled even after an error
+            // so one failed OBS call does not stall the whole rotation.
+            scheduleTimeout(advance, clip.duration);
+        };
+
+        const advance = () => {
+            posInBatch++;
+            if (posInBatch < batches[batchIndex].items.length) {
+                playCurrent();
+                return;
+            }
+
+            // Batch finished: scores take over, videos stay paused until the
+            // sequence hands the program back.
+            const finishedBatch = batchIndex;
+            posInBatch = 0;
+            batchIndex = (batchIndex + 1) % batches.length;
+            if (config.showScores && scoreCount) {
+                scheduleTimeout(() => runScoreSequence(finishedBatch), config.transitionTime);
+            } else {
+                playCurrent();
+            }
+        };
+
+        const runScoreSequence = async (finishedBatch) => {
+            // Park the plan's 🔴 marker on this batch's scores block
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('obs-event', {
+                    type: 'automation-now-playing',
+                    kind: 'scores',
+                    afterBatchIndex: finishedBatch
+                });
+            }
+            try {
+                const shown = await showScores(
+                    { scoresItems, interval: config.scoreInterval }, mainWindow, playCurrent);
+                if (!shown.success) {
+                    playCurrent();
+                }
+            } catch (error) {
+                console.log(`Error showing scores: ${error.message}`);
+                playCurrent();
+            }
+        };
+
+        await playCurrent();
+
+        const totals = batches.map(batch =>
+            Math.round(batch.items.reduce((sum, clip) => sum + clip.duration, 0) / 1000));
+        console.log(`Automation started: ${clips.length} clip(s) in ${batches.length} batch(es) `
+            + `of ~[${totals.join(', ')}] s, scores ${config.showScores && scoreCount ? 'between batches' : 'disabled'}`);
 
         return { success: true };
     } catch (error) {
@@ -653,6 +871,13 @@ function getOBSProcess() {
     return obsProcess;
 }
 
+// Whether the OBS instance the app launched is still up. Exit is observed by
+// the 'exit' listener obsLauncher attaches; killed/exitCode cover the window
+// before that listener runs.
+function isOBSProcessAlive() {
+    return Boolean(obsProcess && !obsProcess.killed && obsProcess.exitCode === null);
+}
+
 module.exports = {
     connectToOBS,
     disconnectFromOBS,
@@ -667,5 +892,7 @@ module.exports = {
     updateSceneCollectionPaths,
     enableFullscreenProjection,
     setOBSProcess,
-    getOBSProcess
+    getOBSProcess,
+    isOBSProcessAlive,
+    buildBalancedBatches
 };

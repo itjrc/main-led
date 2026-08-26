@@ -65,6 +65,16 @@ class OBSManager {
                     this.stopAutomation();
                 }
                 break;
+            case 'obs-process-exited':
+                this.addLog('OBS has exited', 'info');
+                this.setLaunchButtonEnabled(true);
+                break;
+            case 'automation-plan':
+                this.renderAutomationPlan(data);
+                break;
+            case 'automation-now-playing':
+                this.markPlanNowPlaying(data);
+                break;
         }
     }
 
@@ -84,9 +94,13 @@ class OBSManager {
 
     async launchOBS() {
         try {
+            // Down for the whole OBS lifetime, so a second instance cannot be
+            // launched; re-armed by the obs-process-exited event or a failure.
+            this.setLaunchButtonEnabled(false);
+
             // Show progress dialog
             this.showLaunchProgress();
-            
+
             this.addLog('Launching OBS Studio...', 'info');
 
             // Hand the launcher our connection settings so it can enable the
@@ -94,7 +108,8 @@ class OBSManager {
             const config = this.getConfig();
             const result = await window.electronAPI.ipcRenderer.invoke('launch-obs', {
                 address: config.obsAddress,
-                password: config.obsPassword
+                password: config.obsPassword,
+                videoPath: this.getVideoDirectory()
             });
             
             // Hide progress dialog
@@ -114,10 +129,20 @@ class OBSManager {
                 }, 8000);
             } else {
                 this.addLog(`Failed to launch OBS: ${result.error}`, 'error');
+                this.setLaunchButtonEnabled(true);
             }
         } catch (error) {
             this.hideLaunchProgress();
             this.addLog(`Error launching OBS: ${error.message}`, 'error');
+            this.setLaunchButtonEnabled(true);
+        }
+    }
+
+    setLaunchButtonEnabled(enabled) {
+        const btn = document.getElementById('launch-obs-btn');
+        if (btn) {
+            btn.disabled = !enabled;
+            btn.title = enabled ? '' : 'OBS is already running';
         }
     }
 
@@ -135,6 +160,9 @@ class OBSManager {
                 this.addLog('Successfully connected to OBS', 'success');
                 await this.refreshScenes();
                 await this.initializeScenes();
+                // The loaded collection may predate the latest folder changes;
+                // mirror the folder into LOOP_IND without waiting for a click.
+                await this.syncMediaLibrary();
             } else {
                 this.isConnected = false;
                 this.updateConnectionStatus('disconnected', 'Connection failed');
@@ -244,7 +272,10 @@ class OBSManager {
             const result = await window.electronAPI.ipcRenderer.invoke('obs-start-automation', {
                 scoresItems: this.scoresItems,
                 loopItems: this.loopItems,
-                config: config
+                config: config,
+                // The main process probes each clip's real duration there to
+                // build the balanced batches
+                videoPath: this.getVideoDirectory()
             });
             
             if (result.success) {
@@ -264,6 +295,7 @@ class OBSManager {
             await window.electronAPI.ipcRenderer.invoke('obs-stop-automation');
             this.isAutomationRunning = false;
             this.updateAutomationButtons(false);
+            this.markPlanNowPlaying(null); // nothing is on air anymore
             this.addLog('LED automation stopped', 'info');
         } catch (error) {
             this.addLog(`Error stopping automation: ${error.message}`, 'error');
@@ -427,23 +459,24 @@ class OBSManager {
         }
     }
 
+    // Works in both states: connected, LOOP_IND is updated live over the
+    // WebSocket; OBS off, the collection file on disk is updated instead and
+    // loads at the next OBS launch.
     async syncMediaLibrary() {
-        if (!this.isConnected) {
-            this.addLog('Connect to OBS before syncing the LOOP_IND scene', 'warning');
-            return;
-        }
-
         const button = document.getElementById('sync-library-btn');
         if (button) button.disabled = true;
 
         try {
-            this.addLog('Syncing LOOP_IND with the media folder...', 'info');
+            this.addLog(this.isConnected
+                ? 'Syncing LOOP_IND with the media folder...'
+                : 'OBS not connected: syncing the collection file on disk...', 'info');
             const result = await window.electronAPI.ipcRenderer.invoke(
                 'sync-media-library', this.getVideoDirectory());
 
             if (result.success) {
+                const target = result.offline ? ' in the collection file (loads at next OBS launch)' : '';
                 this.addLog(
-                    `Sync done: ${result.added.length} added, ${result.removed.length} removed, ${result.kept} unchanged`,
+                    `Sync done${target}: ${result.added.length} added, ${result.removed.length} removed, ${result.kept} unchanged`,
                     'success');
                 (result.failed || []).forEach(f => this.addLog(`Could not add ${f.name}: ${f.error}`, 'error'));
             } else {
@@ -452,7 +485,7 @@ class OBSManager {
         } catch (error) {
             this.addLog(`Sync error: ${error.message}`, 'error');
         } finally {
-            if (button) button.disabled = !this.isConnected;
+            if (button) button.disabled = false;
         }
     }
 
@@ -494,19 +527,19 @@ class OBSManager {
     }
 
     updateButtonStates() {
+        // sync-library-btn is absent on purpose: the sync also works with OBS
+        // off (it rewrites the collection file), so it stays enabled.
         const controlButtons = [
-            'connect-btn', 'disconnect-btn', 'refresh-scenes-btn', 
+            'connect-btn', 'disconnect-btn', 'refresh-scenes-btn',
             'goto-scores-btn', 'goto-loop-btn', 'show-scores-btn',
-            'init-scenes-btn', 'start-automation-btn', 'sync-library-btn'
+            'init-scenes-btn', 'start-automation-btn'
         ];
-        
+
         controlButtons.forEach(id => {
             const btn = document.getElementById(id);
             if (btn) {
                 if (id === 'connect-btn') {
                     btn.disabled = this.isConnected;
-                } else if (id === 'disconnect-btn') {
-                    btn.disabled = !this.isConnected;
                 } else {
                     btn.disabled = !this.isConnected;
                 }
@@ -517,9 +550,81 @@ class OBSManager {
     updateAutomationButtons(running) {
         const startBtn = document.getElementById('start-automation-btn');
         const stopBtn = document.getElementById('stop-automation-btn');
-        
+
         if (startBtn) startBtn.disabled = running;
         if (stopBtn) stopBtn.disabled = !running;
+    }
+
+    // Draw the batch plan the automation just computed: which clips play
+    // together, each batch's total run time, and where the score blocks land.
+    renderAutomationPlan(data) {
+        const card = document.getElementById('automation-plan-card');
+        const container = document.getElementById('automation-plan');
+        if (!card || !container) return;
+
+        const seconds = ms => `${Math.round(ms / 1000)} s`;
+        container.innerHTML = '';
+
+        (data.batches || []).forEach((batch, index) => {
+            const block = document.createElement('div');
+            block.className = 'plan-batch';
+
+            const title = document.createElement('div');
+            title.className = 'plan-batch-title';
+            title.textContent = `Batch ${index + 1} · ${batch.items.length} video(s) · ${seconds(batch.total)}`;
+            block.appendChild(title);
+
+            batch.items.forEach((item, itemIndex) => {
+                const row = document.createElement('div');
+                row.className = 'plan-clip';
+                row.dataset.batch = index;
+                row.dataset.pos = itemIndex;
+                row.textContent = `${item.name} — ${seconds(item.duration)}`;
+                if (!item.probed) {
+                    row.textContent += ' (estimated)';
+                    row.title = 'Real duration could not be read; fallback duration used';
+                }
+                block.appendChild(row);
+            });
+
+            container.appendChild(block);
+
+            if (data.scoresBetween) {
+                const scores = document.createElement('div');
+                scores.className = 'plan-scores';
+                scores.dataset.afterBatch = index;
+                scores.textContent = '🏆 Scores';
+                container.appendChild(scores);
+            }
+        });
+
+        const empty = document.getElementById('automation-plan-empty');
+        if (empty) empty.style.display = 'none';
+        card.style.display = '';
+        this.addLog(`Playback plan: ${(data.batches || []).length} balanced batch(es)`, 'info');
+    }
+
+    // Move the 🔴 marker onto what is on air: a clip row, or a scores block.
+    // Called with no argument to clear it (automation stopped).
+    markPlanNowPlaying(data) {
+        const container = document.getElementById('automation-plan');
+        if (!container) return;
+
+        container.querySelectorAll('.playing').forEach(el => el.classList.remove('playing'));
+        if (!data) return;
+
+        let el = null;
+        if (data.kind === 'clip') {
+            el = container.querySelector(
+                `.plan-clip[data-batch="${data.batchIndex}"][data-pos="${data.posInBatch}"]`);
+        } else if (data.kind === 'scores') {
+            el = container.querySelector(`.plan-scores[data-after-batch="${data.afterBatchIndex}"]`);
+        }
+        if (el) {
+            el.classList.add('playing');
+            // The plan list scrolls; keep what is on air in view
+            el.scrollIntoView({ block: 'nearest' });
+        }
     }
 
     updateSceneList(scenes, currentScene) {

@@ -2,11 +2,13 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { processMediaFiles } = require('./mediaConverter');
-const { updateSceneCollectionPaths, setOBSProcess } = require('./obsManager');
+const { resolveDirectory } = require('./videoLibrary');
+const { updateSceneCollectionPaths, setOBSProcess, isOBSProcessAlive } = require('./obsManager');
 const {
     SCENE_COLLECTION_NAME,
     installSceneCollection,
     selectSceneCollection,
+    configureVideoCanvas,
     clearSafeModeSentinel,
     configureWebSocketServer
 } = require('./obsConfig');
@@ -24,10 +26,26 @@ function parsePort(address) {
     }
 }
 
+// Guards the whole launch sequence, not just the spawn: two clicks in quick
+// succession would otherwise both pass the process check while the first
+// conversion pass is still running.
+let launchInProgress = false;
+
 // OBS Launch function
 async function launchOBS(mainWindow, options = {}) {
+    // One OBS at a time: a second portable instance would fight over the same
+    // profile, collection and websocket port.
+    if (launchInProgress) {
+        return { success: false, error: 'An OBS launch is already in progress' };
+    }
+    if (isOBSProcessAlive()) {
+        return { success: false, error: 'OBS is already running. Close it before launching it again.' };
+    }
+
+    launchInProgress = true;
     try {
-        const partnersVideosPath = path.join(__dirname, '..', 'data', 'PARTNERS_VIDEOS');
+        // The folder the Media Library panel points at, not a hardcoded one
+        const partnersVideosPath = resolveDirectory(options.videoPath);
 
         const sendProgress = (step, message) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -57,10 +75,12 @@ async function launchOBS(mainWindow, options = {}) {
         console.log('Updating scene collection paths to be dynamic...');
         updateSceneCollectionPaths();
 
-        // Step 3: Install the scene collection and select it
+        // Step 3: Install the scene collection and select it. LOOP_IND is
+        // rebuilt from the media folder, so OBS opens on the videos that are
+        // actually there instead of whatever the template last shipped.
         sendProgress('importing-collection', 'Importing scene collection...');
 
-        const installed = installSceneCollection();
+        const installed = installSceneCollection(partnersVideosPath);
         if (!installed.success) {
             return { success: false, error: installed.error };
         }
@@ -68,6 +88,14 @@ async function launchOBS(mainWindow, options = {}) {
         const selected = selectSceneCollection();
         if (!selected.success) {
             return { success: false, error: selected.error };
+        }
+
+        // The LED board is 1920x1080; a fresh OBS profile would default its
+        // canvas to the monitor's resolution instead. Not fatal on failure:
+        // connectToOBS re-enforces it over WebSocket after connecting.
+        const canvas = configureVideoCanvas();
+        if (!canvas.success) {
+            console.log(canvas.error);
         }
 
         // Step 4: Enable the WebSocket server with the credentials the UI uses
@@ -105,6 +133,16 @@ async function launchOBS(mainWindow, options = {}) {
         // Store the process reference
         setOBSProcess(obsProcess);
 
+        // Tell the UI when OBS goes away, however it exits, so the Launch
+        // button can re-arm.
+        obsProcess.on('exit', (code) => {
+            console.log(`OBS process exited (code ${code})`);
+            setOBSProcess(null);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('obs-event', { type: 'obs-process-exited' });
+            }
+        });
+
         return {
             success: true,
             message: `OBS launched with scene collection "${SCENE_COLLECTION_NAME}". `
@@ -113,6 +151,8 @@ async function launchOBS(mainWindow, options = {}) {
         };
     } catch (error) {
         return { success: false, error: error.message };
+    } finally {
+        launchInProgress = false;
     }
 }
 

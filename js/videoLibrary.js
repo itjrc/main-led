@@ -28,6 +28,74 @@ function classify(fileName) {
     return 'ignored';
 }
 
+// File names arrive from downloads, USB sticks and macOS copies with characters
+// that break the pipeline further down: decomposed accents (é stored as e + ◌́)
+// that make visually identical names compare different, non-breaking spaces,
+// curly quotes, a % sign that ffmpeg's image2 demuxer reads as a frame pattern
+// and fails on, and characters Windows forbids when the folder sits on a
+// network share. Returns the cleaned name; accents themselves are kept.
+function sanitizeFileName(fileName) {
+    const ext = path.extname(fileName);
+    let base = path.basename(fileName, ext);
+
+    base = base
+        .normalize('NFC')
+        .replace(/[‘’‚ʼ]/g, "'")
+        .replace(/[“”„]/g, "'")
+        .replace(/[<>:"/\\|?*%\u0000-\u001F\u007F]/g, '_')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s.]+|[\s.]+$/g, '');
+
+    if (!base) {
+        base = 'media';
+    }
+
+    return base + ext.normalize('NFC').toLowerCase();
+}
+
+// Rename every media file in the directory to its sanitized name, on disk,
+// before anything reads the folder - the cleaned name is what OBS displays and
+// what the collection stores. A file OBS still holds open fails to rename; it
+// is reported and retried at the next sync.
+function sanitizeMediaFileNames(directory) {
+    const dir = resolveDirectory(directory);
+    const renamed = [];
+    const failed = [];
+
+    if (!fs.existsSync(dir)) {
+        return { renamed, failed };
+    }
+
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isFile() || classify(entry.name) === 'ignored') continue;
+
+        const clean = sanitizeFileName(entry.name);
+        if (clean === entry.name) continue;
+
+        const from = path.join(dir, entry.name);
+        const cleanExt = path.extname(clean);
+        const stem = path.basename(clean, cleanExt);
+        let target = path.join(dir, clean);
+
+        // NTFS resolves case-insensitively, so a case-only rename finds the
+        // source itself: that is a rename onto the same file, not a collision.
+        let attempt = 2;
+        while (fs.existsSync(target) && target.toLowerCase() !== from.toLowerCase()) {
+            target = path.join(dir, `${stem} (${attempt})${cleanExt}`);
+            attempt++;
+        }
+
+        try {
+            fs.renameSync(from, target);
+            renamed.push({ from: entry.name, to: path.basename(target) });
+        } catch (error) {
+            failed.push({ name: entry.name, error: error.message });
+        }
+    }
+
+    return { renamed, failed };
+}
+
 // List what the directory holds, without touching ffprobe
 function scanDirectory(directory) {
     const dir = resolveDirectory(directory);
@@ -239,6 +307,8 @@ module.exports = {
     DEFAULT_VIDEO_DIR,
     PLAYABLE_EXTENSIONS,
     resolveDirectory,
+    sanitizeFileName,
+    sanitizeMediaFileNames,
     scanDirectory,
     getLibraryStats,
     formatBytes,

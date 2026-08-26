@@ -471,8 +471,8 @@
 
         .led-grid .log-container {
             flex: 1 1 auto;
-            max-height: none;
-            min-height: 26rem;
+            min-height: 16rem;
+            max-height: 26rem;
         }
 
         .led-grid .controls-grid {
@@ -486,10 +486,10 @@
             gap: 0.5rem;
         }
 
-        /* Log spans the automation and media rows; media sits under scenes */
+        /* Row 2: scenes | automation | plan. Row 3: media (wide) | log. */
         .led-grid .led-log {
             grid-column: 3;
-            grid-row: 2 / span 2;
+            grid-row: 3;
         }
 
         .led-grid .led-media {
@@ -686,6 +686,66 @@
             flex: 1;
         }
 
+        /* Playback plan: its own column, so the batch list never stretches
+           the automation panel - the list scrolls inside instead. */
+        .led-grid .led-plan {
+            grid-column: 3;
+            grid-row: 2;
+        }
+
+        .plan-empty {
+            font-size: 0.8rem;
+            color: hsl(var(--muted-foreground));
+        }
+
+        #automation-plan {
+            flex: 1 1 auto;
+            min-height: 0;
+            max-height: 30rem;
+            overflow-y: auto;
+            padding-right: 0.25rem;
+        }
+
+        .plan-batch {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            padding: 0.6rem 0.75rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .plan-batch-title {
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .plan-clip {
+            font-size: 0.8rem;
+            opacity: 0.85;
+            padding-left: 0.75rem;
+        }
+
+        .plan-scores {
+            text-align: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin: 0.4rem 0;
+            opacity: 0.9;
+        }
+
+        /* 🔴 marks what is on air right now */
+        .plan-clip.playing,
+        .plan-scores.playing {
+            opacity: 1;
+            font-weight: 600;
+        }
+
+        .plan-clip.playing::before,
+        .plan-scores.playing::before {
+            content: '🔴 ';
+        }
+
         /* Responsive design */
         /* Narrower screens drop the explicit placement and just flow */
         @media (max-width: 1280px) {
@@ -694,7 +754,8 @@
             }
 
             .led-grid .led-log,
-            .led-grid .led-media {
+            .led-grid .led-media,
+            .led-grid .led-plan {
                 grid-column: auto;
                 grid-row: auto;
             }
@@ -710,7 +771,8 @@
             }
 
             .led-grid .led-log,
-            .led-grid .led-media {
+            .led-grid .led-media,
+            .led-grid .led-plan {
                 grid-column: auto;
                 grid-row: auto;
             }
@@ -898,8 +960,8 @@
                     </div>
 
                     <div class="controls-grid">
-                        <div class="setting-item">
-                            <label for="video-duration">Video duration (ms)</label>
+                        <div class="setting-item" title="Clips play their full length; this value is only used when a clip's real duration cannot be read">
+                            <label for="video-duration">Fallback duration (ms)</label>
                             <input type="number" id="video-duration" value="15000" min="1000" max="120000" step="1000">
                         </div>
 
@@ -924,6 +986,20 @@
                         <button class="btn btn-success" onclick="window.obsManager.startAutomation()" disabled id="start-automation-btn">Start Automation</button>
                         <button class="btn btn-warning" onclick="window.obsManager.stopAutomation()" disabled id="stop-automation-btn">Stop Automation</button>
                     </div>
+                </div>
+
+                <!-- Playback plan: filled at Start Automation -->
+                <div class="section led-plan" id="automation-plan-card">
+                    <h2>
+                        <span>📋</span> Playback plan
+                    </h2>
+                    <p class="plan-empty" id="automation-plan-empty">
+                        Computed when the automation starts: batches of
+                        full-length clips, balanced to run about the same total
+                        time, with a score block between batches. 🔴 marks
+                        what is on air.
+                    </p>
+                    <div id="automation-plan"></div>
                 </div>
 
                 <!-- Media library -->
@@ -974,7 +1050,7 @@
                     </div>
 
                     <div class="panel-actions">
-                        <button class="btn btn-primary" id="sync-library-btn" onclick="window.obsManager.syncMediaLibrary()" disabled>Convert &amp; Sync LOOP_IND</button>
+                        <button class="btn btn-primary" id="sync-library-btn" onclick="window.obsManager.syncMediaLibrary()" title="OBS connected: updates the live LOOP_IND scene. OBS off: updates the collection file for the next launch.">Convert &amp; Sync LOOP_IND</button>
                     </div>
                 </div>
 

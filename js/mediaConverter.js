@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { sanitizeMediaFileNames } = require('./videoLibrary');
 
 // Converted source files are moved here rather than deleted, so a bad or
 // unwanted conversion can always be undone. It lives inside the media folder;
@@ -204,7 +205,19 @@ async function processMediaFiles(partnersVideosPath, mainWindow) {
 
     if (!fs.existsSync(partnersVideosPath)) {
         console.log('PARTNERS_VIDEOS directory not found');
-        return { success: true, results };
+        return { success: true, results, renamed: [] };
+    }
+
+    // Clean the file names before anything reads the folder, so conversion,
+    // sync and the OBS source names all see the cleaned name.
+    const cleaned = sanitizeMediaFileNames(partnersVideosPath);
+    cleaned.renamed.forEach(r => console.log(`Renamed "${r.from}" -> "${r.to}"`));
+    cleaned.failed.forEach(f => console.log(`Could not rename "${f.name}": ${f.error}`));
+    if (cleaned.renamed.length && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('obs-launch-progress', {
+            step: 'checking-videos',
+            message: `Cleaned ${cleaned.renamed.length} file name(s)`
+        });
     }
 
     const files = fs.readdirSync(partnersVideosPath);
@@ -307,7 +320,7 @@ async function processMediaFiles(partnersVideosPath, mainWindow) {
         console.log('No PNG/JPG images found in PARTNERS_VIDEOS directory');
     }
 
-    return { success: true, results };
+    return { success: true, results, renamed: cleaned.renamed };
 }
 
 module.exports = {
