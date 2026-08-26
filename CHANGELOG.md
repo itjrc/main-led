@@ -5,6 +5,28 @@ All notable changes to OBS Main LED are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-26
+
+### Added
+
+- **Partner logo sync**: a new *Partner Logos* panel in LED Control fills
+  `data/PARTNERS_LOGO/` - the folder the `Partners Logo` slideshow reads - from
+  the tournament partners page. The folder is fetched automatically the first
+  time the panel finds it empty, and *Sync from itjr.ca* re-runs it on demand.
+- Logos are read from the site's partner data rather than the page markup: the
+  partners page renders client-side, so its HTML carries template placeholders
+  instead of logos. The data also gives the display order and excludes the
+  dignitary headshots kept in the same asset folder.
+- SVG logos are rasterized to 1024px PNG through a hidden Chromium window, since
+  an OBS slideshow reads PNG/JPEG/BMP/GIF/WEBP but never SVG.
+- A sync mirrors the site: logos it no longer lists are moved to a `REMOVED/`
+  subfolder rather than deleted, and files added to the folder by hand are left
+  alone and reported separately in the panel.
+- After a sync that changed anything, a connected OBS has the slideshow
+  re-pointed at the folder so new logos show without restarting OBS.
+- Unchanged logos are skipped on later syncs by comparing a hash of the file as
+  the site serves it, so an untouched SVG is never rasterized twice.
+
 ## [1.2.0] - 2026-08-26
 
 ### Added
@@ -96,6 +118,7 @@ First packaged release.
   tags.
 - Application version shown in the header.
 
+[1.3.0]: https://github.com/itjrc/main-led/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/itjrc/main-led/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/itjrc/main-led/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/itjrc/main-led/compare/v1.1.0...v1.1.1
