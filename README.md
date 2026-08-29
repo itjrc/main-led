@@ -156,7 +156,7 @@ The application expects these OBS scenes:
 
 ### Video Requirements
 - **Format**: MP4 (auto-converted from MOV, WEBM, MKV, AVI, WMV)
-- **Codec**: H.264 baseline profile
+- **Codec**: H.264 high profile, CRF 18 (near-source quality, original frame rate kept)
 - **Resolution**: 1920x1080 recommended
 - **Duration**: 15 seconds optimal for rotation
 

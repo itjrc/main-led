@@ -57,9 +57,18 @@ async function convertImageToVideo(imagePath) {
             '-f', 'lavfi',
             '-i', 'color=c=black:s=1920x1080:d=5',
             '-i', imagePath,
-            '-filter_complex', '[1:v]scale=1720:-1[fg];[0:v][fg]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2',
+            // -2 keeps the scaled height even (yuv420p needs it), lanczos keeps
+            // the logo edges crisp instead of ffmpeg's default bilinear.
+            '-filter_complex', '[1:v]scale=1720:-2:flags=lanczos[fg];[0:v][fg]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2',
             '-c:v', 'libx264',
+            // A still frame at CRF 16 costs almost nothing in size and keeps
+            // gradients and small text free of the banding the default CRF 23
+            // leaves behind. stillimage tunes x264 for static content.
+            '-preset', 'slow',
+            '-tune', 'stillimage',
+            '-crf', '16',
             '-pix_fmt', 'yuv420p',
+            '-movflags', '+faststart',
             outputPath
         ];
 
@@ -132,16 +141,21 @@ async function convertVideoToMP4(videoPath) {
             return;
         }
 
+        // Quality-first re-encode. These clips are played back by OBS, which
+        // decodes High profile without trouble, so nothing needs the old
+        // baseline / 4915k CBR / 30 fps / refs=1 straitjacket -- that combo
+        // re-compressed every source down to a fixed ~5 Mbps and threw away
+        // frames on 50/60 fps material. CRF 18 on a slow preset is visually
+        // transparent, and resolution, frame rate and aspect are left exactly
+        // as the source had them. The files come out bigger; that is the point.
         const args = [
             '-y', '-i', videoPath,
             '-c:v', 'libx264',
-            '-profile:v', 'baseline',
-            '-level', '4.0',
-            '-b:v', '4915k',
-            '-r', '30',
-            '-g', '30',
-            '-refs', '1',
+            '-profile:v', 'high',
+            '-preset', 'slow',
+            '-crf', '18',
             '-pix_fmt', 'yuv420p',
+            '-movflags', '+faststart',
             '-brand', 'mp42',
             '-an',
             outputPath
